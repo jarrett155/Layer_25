@@ -1677,7 +1677,7 @@ void Test_NC_AP_00(bool use_NC)
 {    
     int status;
     uint8_t myAddr[6];
-    uint8_t toAddr[3][6];
+    uint8_t toAddr[6];
     uint8_t apAddr[6];
     uint8_t data[DATA_SIZE];
     
@@ -1701,26 +1701,33 @@ void Test_NC_AP_00(bool use_NC)
     myAddr[4] = 0x00;
     myAddr[5] = 0x00;
 
-    toAddr[0][0] = 0xFF;
-    toAddr[0][1] = 0xFF;
-    toAddr[0][2] = 0xFF;
-    toAddr[0][3] = 0xFF;
-    toAddr[0][4] = 0xFF;
-    toAddr[0][5] = 0xFF;
-    
-    toAddr[1][0] = 0xAA;
-    toAddr[1][1] = 0xAA;
-    toAddr[1][2] = 0xAA;
-    toAddr[1][3] = 0xAA;
-    toAddr[1][4] = 0xAA;
-    toAddr[1][5] = 0xAA;
+    toAddr[0] = 0xFF;
+    toAddr[1] = 0xFF;
+    toAddr[2] = 0xFF;
+    toAddr[3] = 0xFF;
+    toAddr[4] = 0xFF;
+    toAddr[5] = 0xFF;
 
-    toAddr[2][0] = 0xBB;
-    toAddr[2][1] = 0xBB;
-    toAddr[2][2] = 0xBB;
-    toAddr[2][3] = 0xBB;
-    toAddr[2][4] = 0xBB;
-    toAddr[2][5] = 0xBB;
+    IP_to_MAC_map.insert(std::pair<int,std::vector<uint8_t>>(0,std::std::vector<uint8_t>(toAddr, sizeof(toAddr) / sizeof(uint8_t))));
+
+    
+    toAddr[0] = 0xAA;
+    toAddr[1] = 0xAA;
+    toAddr[2] = 0xAA;
+    toAddr[3] = 0xAA;
+    toAddr[4] = 0xAA;
+    toAddr[5] = 0xAA;
+
+    IP_to_MAC_map.insert(std::pair<int,std::vector<uint8_t>>(1,std::std::vector<uint8_t>(toAddr, sizeof(toAddr) / sizeof(uint8_t))));
+
+    toAddr[0] = 0xBB;
+    toAddr[1] = 0xBB;
+    toAddr[2] = 0xBB;
+    toAddr[3] = 0xBB;
+    toAddr[4] = 0xBB;
+    toAddr[5] = 0xBB;
+
+    IP_to_MAC_map.insert(std::pair<int,std::vector<uint8_t>>(2,std::std::vector<uint8_t>(toAddr, sizeof(toAddr) / sizeof(uint8_t))));
     
     apAddr[0] = 0x00;
     apAddr[1] = 0x00;
