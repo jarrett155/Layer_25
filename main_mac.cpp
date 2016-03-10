@@ -17,9 +17,12 @@
 #include <queue>
 #include <map>
 #include <vector>
+#include "pthread.h"
+
 
 #define DATA_SIZE 2000
 #define TEST_MCS_INDEX 0
+#define ACK_TIMEOUT_MS 500
 
 #include "stdarg.h"
 #define default_log_file "mac_handler_tester.log"
@@ -137,6 +140,225 @@ int main(int argc, char *argv[]){
     }
     return 0;
 }
+
+
+
+
+//AP HANDLER CODE. SHOULD ADD TO OWN FILE BUT CMAKE
+
+struct IP_NC_Frame
+{
+    int ip_src, id_dst;
+    int seq_num_from;
+    std::vector<uint8_t> data;
+
+};
+
+struct NC_Dest
+{
+    std::queue<IP_NC_Frame> to_send;
+    bool waiting_for_ack;
+    int seq_need_ack;
+    IP_NC_Frame data_needs_ack;
+    int size;
+    bool must_retransmit;
+    pthread_t timeout_id;
+    int ip_dst;
+    // to add ack nums that can do NC
+};
+
+class AP_Handler
+{
+    std::vector<NC_Dest> destinations;
+    std::map<int,int> IP_to_index_map;
+    int current_destination;
+    int current_size;
+    int frames_to_send;
+    IP_NC_Frame to_code;
+    int pop_nc_dest;
+    int nc_dest_popped;
+    bool retransmit;
+
+
+public:
+
+    AP_Handler()
+
+    bool AP_Has_Next();
+
+    void received_Frame(int seq_num, int ip_dst, int ip_src, std::vector<uint8_t> data);
+
+    bool has_Matching_Frame(IP_NC_Frame frame_to_match);
+
+    IP_NC_Frame get_NC_Frame(IP_NC_Frame frame_to_match);
+
+    IP_NC_Frame get_Next();
+
+    void set_NC_Ack(int seq_num, int ip_dest);
+
+    void pop_Next_Frame();
+
+    void ack_Frame(int src_ip, int seq_num);
+
+};
+
+void ack_Timeout(int & must_retransmit)
+{
+    usleep(1000*ACK_TIMEOUT_MS);
+    must_retransmit = true;
+}
+
+AP_Handler::AP_Handler()
+{
+    retransmit = false;
+    current_destination = 0;
+    current_size = 0;
+    frames_to_send = 0;
+    nc_dest_popped = 1;
+}
+
+// returns true if the AP has a frame to send otherwise returns false
+bool AP_Handler::AP_Has_Next()
+{
+    return frames_to_send;
+}
+
+// adds a received frame to its destination queue
+void AP_Handler::received_Frame(int seq_num, int ip_dst, int ip_src, std::vector<uint8_t> data)
+{
+    // check if we have seen this ip before
+    if IP_to_index_map.count(ip_dst)
+    {
+        int index_of_dst = IP_to_index_map[ip_dst];
+        IP_NC_Frame frame_received;
+        frame_received.ip_src = ip_src;
+        frame_received.ip_dst = ip_dst;
+        frame_received.data = data;
+        frame_received.seq_num_from = seq_num;
+        destinations[index_of_dst].to_send.push_back(frame_received);
+        destinations[index_of_dst].size ++;
+        frames_to_send ++;
+
+    }
+    // if not add a new destination node to AP handler
+    else
+    {
+        NC_Dest new_dest;
+        new_dest.waiting_for_ack = false;
+        new_dest.seq_need_ack = 0;
+        new_dest.size = 1;
+        IP_NC_Frame frame_received;
+        frame_received.ip_src = ip_src;
+        frame_received.ip_dst = ip_dst;
+        frame_received.data = data;
+        frame_received.seq_num_from = seq_num;
+        new_dest.to_send.push_back(frame_received);
+        destinations.push_back(new_dest);
+        current_size ++;
+        frames_to_send ++;
+    }
+}
+
+// Find if a frame can be network coded with frame_to_match
+bool AP_Handler::has_Matching_Frame(IP_NC_Frame frame_to_match)
+{
+    if (destinations[current_destination].waiting_for_ack)
+    {
+        return false;
+    }
+    else
+    {
+        int nc_dest = frame_to_match.ip_src;
+        int nc_dest_index = IP_to_index_map[nc_dest];
+        if( !destinations[nc_dest_index].waiting_for_ack && destinations[nc_dest_index].to_send.front().ip_src == frame_to_match.ip_dst)
+        {
+            nc_dest_popped = 0;
+            pop_nc_dest = nc_dest;
+            to_code = destinations[nc_dest_index].to_send.front();
+            return true
+        }
+    }
+    return false
+
+}
+
+// Get the frame that will be network coded with frame_to_match.
+// Only call after has_Matching_Frame returns true
+IP_NC_Frame AP_Handler::get_NC_Frame()
+{
+    return to_code;
+}
+
+// Get the next frame that will be sent by the AP
+IP_NC_Frame AP_Handler::get_Next()
+{
+    int start = current_destination;
+
+    do 
+    {
+        current_destination = (current_destination + 1) % current_size;
+        if(destinations[current_destination].must_retransmit)
+        {
+            retransmit = true;
+            return destinations[current_destination].data_needs_ack;
+        }
+    } while(destinations[current_destination].size < 1 && current_destination != start);
+    if destinations[current_destination].size > 0
+        return destinations[current_destination].to_send.front();
+    else 
+        return NULL;
+}
+
+// Set the ack for frames used in NC. Must be called once for each of the
+// destinations in an NC frame.
+void set_NC_Ack(int seq_num, int ip_dest)
+{
+    int index_of_dst = IP_to_index_map[ip_dst];
+    destinations[index_of_dst].waiting_for_ack = true;
+    destinations[index_of_dst].data_needs_ack = destinations[index_of_dst].to_send.front();
+    destinations[index_of_dst].seq_need_ack = seq_num;
+    destinations[index_of_dst].must_retransmit = false;
+    pthread_create(&destinations[index_of_dst].timeout_id, NULL, ack_Timeout, &destinations[index_of_dst].must_retransmit);
+
+}
+
+// Used to clear out a sent frame once it is done sending.
+// Must be called after a frame is sent.
+void AP_Handler::pop_Next_Frame()
+{
+    if(!retransmit)
+    {
+        destinations[current_destination].to_send.pop();
+        frames_to_send --;
+    }
+    else
+        retransmit = false;
+    current_destination = (current_destination + 1) % current_size;
+    if(nc_dest_popped == 0)
+    {
+        destinations[pop_nc_dest].to_send.pop();
+        nc_dest_popped = 1;
+        frames_to_send --;
+    }
+}
+
+// This function is used to ack a frame that was previously sent as an NC frame.
+// Call this when an NC ack is received. 
+void AP_Handler::ack_Frame(int src_ip, int seq_num)
+{
+    int index_of_dst = IP_to_index_map[ip_dst];
+    if (seq_num == destinations[index_of_dst].seq_need_ack)
+    {
+        destinations[index_of_dst].waiting_for_ack = false;
+        pthread_cancel(destinations[index_of_dst].timeout_id);
+        destinations[index_of_dst].must_retransmit = false;
+    }
+}
+
+// END AP HANDLER
+
+
+
 
 
 //##########################################################################
@@ -1208,8 +1430,6 @@ void Test_Relay_CC()
 //##########################################################################
 /** function to be called by MAC to deliver data*/
 
-std::queue<RX_datagram> received_data;
-int received_frames_waiting = 0;
 void mac_NC_receiver(RX_datagram * mac_data, const std::queue<RX_datagram> &received_data)
 {
     // process data
@@ -1298,7 +1518,7 @@ void Test_NC_AA()
                         vector<uint8_t> remembered_data = NC_data_remembered[seq_num1];
                         NC_data_remembered.erase()
                         vector<uint8_t> decoded_data;
-                        for (int i = 0; i <= 10; i++)
+                        for (int i = 0; i <= 19; i++)
                         {
                             decoded_data.push_back(remembered_data[i]^NC_frame.data[20+i]);
                         }
@@ -1317,7 +1537,7 @@ void Test_NC_AA()
                         vector<uint8_t> remembered_data = NC_data_remembered[seq_num2];
                         NC_data_remembered.erase()
                         vector<uint8_t> decoded_data;
-                        for (int i = 0; i <= 10; i++)
+                        for (int i = 0; i <= 19; i++)
                         {
                             decoded_data.push_back(remembered_data[i]^NC_frame.data[20+i]);
                         }
@@ -1356,15 +1576,15 @@ void Test_NC_AA()
 
             // source ip addr
             data[L3_start + 0] = 0;
-            data[L3_start + 0] = 0;
-            data[L3_start + 0] = 0;
-            data[L3_start + 0] = 1;
+            data[L3_start + 1] = 0;
+            data[L3_start + 2] = 0;
+            data[L3_start + 3] = 1;
 
             // dest ip addr
-            data[L3_start + 0] = 0;
-            data[L3_start + 0] = 0;
-            data[L3_start + 0] = 0;
-            data[L3_start + 0] = 2;
+            data[L3_start + 4] = 0;
+            data[L3_start + 5] = 0;
+            data[L3_start + 6] = 0;
+            data[L3_start + 7] = 2;
 
             data[data_start + 0] = 'F';
             data[data_start + 1] = 'r';
@@ -1396,15 +1616,15 @@ void Test_NC_AA()
 
             // source ip addr
             data[L3_start + 0] = 0;
-            data[L3_start + 0] = 0;
-            data[L3_start + 0] = 0;
-            data[L3_start + 0] = 1;
+            data[L3_start + 1] = 0;
+            data[L3_start + 2] = 0;
+            data[L3_start + 3] = 1;
 
             // dest ip addr
-            data[L3_start + 0] = 0;
-            data[L3_start + 0] = 0;
-            data[L3_start + 0] = 0;
-            data[L3_start + 0] = 2;
+            data[L3_start + 4] = 0;
+            data[L3_start + 5] = 0;
+            data[L3_start + 6] = 0;
+            data[L3_start + 7] = 2;
 
 
             data[data_start + 0] = 'F';
@@ -1432,7 +1652,7 @@ void Test_NC_AA()
             success_frame++;
  //           std::cout << std::endl << "        [Host] Success! " << success_frame << "/" << total_frame << std::endl;
             int seq_num_sent = handler.get_seq_num();
-            vector<uint8_t> to_remember(data + data_start, data + data_start + 11)
+            vector<uint8_t> to_remember(data + L3_start, data + data_start + 11)
             NC_data_remembered.insert(std::pair<int,vector<uint8_t>(seq_num_sent, to_remember));
             break;
         case -1:  
@@ -1524,7 +1744,7 @@ void Test_NC_BB()
                         vector<uint8_t> remembered_data = NC_data_remembered[seq_num1];
                         NC_data_remembered.erase()
                         vector<uint8_t> decoded_data;
-                        for (int i = 0; i <= 10; i++)
+                        for (int i = 0; i <= 19; i++)
                         {
                             decoded_data.push_back(remembered_data[i]^NC_frame.data[20+i]);
                         }
@@ -1535,7 +1755,7 @@ void Test_NC_BB()
                 }
                 else if(ip2 == myip)
                 {
-                    it = NC_data_remembered.find(seq_num1);
+                    it = NC_data_remembered.find(seq_num2);
                     if (it != NC_data_remembered.end())
                     {
                         seq_to_ack = seq_num2;
@@ -1543,7 +1763,7 @@ void Test_NC_BB()
                         vector<uint8_t> remembered_data = NC_data_remembered[seq_num2];
                         NC_data_remembered.erase()
                         vector<uint8_t> decoded_data;
-                        for (int i = 0; i <= 10; i++)
+                        for (int i = 0; i <= 19; i++)
                         {
                             decoded_data.push_back(remembered_data[i]^NC_frame.data[20+i]);
                         }
@@ -1582,24 +1802,24 @@ void Test_NC_BB()
 
             // source ip addr
             data[L3_start + 0] = 0;
-            data[L3_start + 0] = 0;
-            data[L3_start + 0] = 0;
-            data[L3_start + 0] = 2;
+            data[L3_start + 1] = 0;
+            data[L3_start + 2] = 0;
+            data[L3_start + 3] = 2;
 
             // dest ip addr
-            data[L3_start + 0] = 0;
-            data[L3_start + 0] = 0;
-            data[L3_start + 0] = 0;
-            data[L3_start + 0] = 1;
+            data[L3_start + 4] = 0;
+            data[L3_start + 5] = 0;
+            data[L3_start + 6] = 0;
+            data[L3_start + 7] = 1;
 
             data[data_start + 0] = 'F';
             data[data_start + 1] = 'r';
             data[data_start + 2] = 'o';
             data[data_start + 3] = 'm';
             data[data_start + 4] = ' ';
-            data[data_start + 5] = 'A';
-            data[data_start + 6] = 'A';
-            data[data_start + 7] = 'A';
+            data[data_start + 5] = 'B';
+            data[data_start + 6] = 'B';
+            data[data_start + 7] = ' ';
             data[data_start + 10] = '\0';
             needs_to_NC_ACK = false;  
         }
@@ -1622,15 +1842,15 @@ void Test_NC_BB()
 
             // source ip addr
             data[L3_start + 0] = 0;
-            data[L3_start + 0] = 0;
-            data[L3_start + 0] = 0;
-            data[L3_start + 0] = 1;
+            data[L3_start + 1] = 0;
+            data[L3_start + 2] = 0;
+            data[L3_start + 3] = 1;
 
             // dest ip addr
-            data[L3_start + 0] = 0;
-            data[L3_start + 0] = 0;
-            data[L3_start + 0] = 0;
-            data[L3_start + 0] = 2;
+            data[L3_start + 4] = 0;
+            data[L3_start + 5] = 0;
+            data[L3_start + 6] = 0;
+            data[L3_start + 7] = 2;
 
 
             data[data_start + 0] = 'F';
@@ -1658,7 +1878,7 @@ void Test_NC_BB()
             success_frame++;
  //           std::cout << std::endl << "        [Host] Success! " << success_frame << "/" << total_frame << std::endl;
             int seq_num_sent = handler.get_seq_num();
-            vector<uint8_t> to_remember(data + data_start, data + data_start + 11)
+            vector<uint8_t> to_remember(data + L3_start, data + data_start + 11)
             NC_data_remembered.insert(std::pair<int,vector<uint8_t>(seq_num_sent, to_remember));
             break;
         case -1:  
@@ -1739,6 +1959,9 @@ void Test_NC_AP_00(bool use_NC)
     Mac_handler handler;
     std::queue<RX_datagram> received_data;
     void mac_NC_receiver(RX_datagram * mac_data, &received_data);
+
+    AP_Handler ap_handle;
+
     handler.mac_setRxCallback(mac_NC_receiver);
     handler.set_myadx(myAddr);
     handler.set_PHY_TX_MCS(TEST_MCS_INDEX);
@@ -1757,49 +1980,22 @@ void Test_NC_AP_00(bool use_NC)
             RX_datagram NC_frame(received_data.pop());
             if(NC_frame.data[6] == 0xAA && NC_frame.data[7] == 0xAA)
             {
-                int seq_num1 = 256*NC_frame.data[8] + NC_frame.data[9];
-                int seq_num2 = 256*NC_frame.data[10] + NC_frame.data[11];
-                int ip1 = 256*256*256*NC_frame.data[12] + 256*256*NC_frame.DATA[13] + 256*NC_frame.DATA[14] + NC_frame.DATA[15];
-                int ip2 = 256*256*256*NC_frame.data[16] + 256*256*NC_frame.DATA[17] + 256*NC_frame.DATA[18] + NC_frame.DATA[19];
-                if( ip1 == myip)
-                {
-                    it = NC_data_remembered.find(seq_num1);
-                    if (it != NC_data_remembered.end())
-                    {
-                        seq_to_ack = seq_num1;
-                        needs_to_NC_ACK = true;
-                        vector<uint8_t> remembered_data = NC_data_remembered[seq_num1];
-                        NC_data_remembered.erase()
-                        vector<uint8_t> decoded_data;
-                        for (int i = 0; i++; i <= 7)
-                        {
-                            decoded_data.push_back(remembered_data[i]^NC_frame.data[20+i]);
-                        }
-                        std::copy(decoded_data.begin(), decoded_data.end(), std::ostream_iterator<uint8_t>(std::cout, " "));
-                    }
-                    
+                int seq_num_ack = 256*NC_frame.data[8] + NC_frame.data[9];
+                int ip_src = 256*256*256*NC_frame.data[10] + 256*256*NC_frame.DATA[11] + 256*NC_frame.DATA[12] + NC_frame.DATA[13];
+                int ip_dst = 256*256*256*NC_frame.data[14] + 256*256*NC_frame.DATA[15] + 256*NC_frame.DATA[16] + NC_frame.DATA[17];
+                ap_handle.ack_Frame(src_ip, seq_num_ack);
 
-                }
-                else if(ip2 == myip)
-                {
-                    it = NC_data_remembered.find(seq_num1);
-                    if (it != NC_data_remembered.end())
-                    {
-                        seq_to_ack = seq_num2;
-                        needs_to_NC_ACK = true;
-                        vector<uint8_t> remembered_data = NC_data_remembered[seq_num2];
-                        NC_data_remembered.erase()
-                        vector<uint8_t> decoded_data;
-                        for (int i = 0; i++; i <= 10)
-                        {
-                            decoded_data.push_back(remembered_data[i]^NC_frame.data[20+i]);
-                        }
-                        std::copy(decoded_data.begin(), decoded_data.end(), std::ostream_iterator<char>(std::cout, " "));
-                    }
-                }
+                vector<uint8_t> data_vector(NC_frame.data + 18, NC_frame.data + 18 + 11);
+                ap_handle.received_Frame(NC_fram.seq_num, ip_dst, ip_src, data_vector);
+
+
             }
             else
             {
+
+                vector<uint8_t> data_vector(NC_frame.data + 18, NC_frame.data + 18 + 11);
+                ap_handle.received_Frame(NC_fram.seq_num, ip_dst, ip_src, data_vector);
+
                 printf("      receive data %s\n", NC_frame.data); 
             }
         }
@@ -1810,85 +2006,111 @@ void Test_NC_AP_00(bool use_NC)
         uint32_t delay = (rand()%30)*FRAME_IDLE_UNIT;
         usleep(delay);        
   //    std::cout << std::endl << "            [Host] START new frame" << std::endl;
-        if(send_NC = true)
+        if(ap_handle.AP_Has_Next())
         {
-            //set NC header and LLC header
-            data_start = LLC_Header_Size + NC_L25_Header_Size + L3_Header_Size;
-            L3_start = data_start - L3_Header_Size;
-
-            // LLC Header for layer 2.5
-            data[0] = 0xAA;
-            data[1] = 0XAA;
-            data[2] = 0X03;
-            data[3] = 0XAA;
-            data[4] = 0XAA;
-            data[5] = 0XAA;
-            data[6] = 0XAA;
-            data[7] = 0XAA;
-
-            // NC Header for ACK
-            data[8] = seq_to_ack/256;
-            data[9] = seq_to_ack;
-
-            // source ip addr
-            data[L3_start + 0] = 0
-            data[L3_start + 0] = 0
-            data[L3_start + 0] = 0
-            data[L3_start + 0] = 2
-
-            // dest ip addr
-            data[L3_start + 0] = 0
-            data[L3_start + 0] = 0
-            data[L3_start + 0] = 0
-            data[L3_start + 0] = 1
-
-            data[data_start + 0] = 'F';
-            data[data_start + 1] = 'r';
-            data[data_start + 2] = 'o';
-            data[data_start + 3] = 'm';
-            data[data_start + 4] = ' ';
-            data[data_start + 5] = 'A';
-            data[data_start + 6] = 'A';
-            data[data_start + 7] = 'A';
-            data[data_start + 10] = '\0';
-            needs_to_NC_ACK = false;  
-        }
-        else
-        {
-            //set LLC header to standard val
-            data_start = LLC_Header_Size + L3_Header_Size;
-            L3_start = data_start - L3_Header_Size;
-
-            //LLC Header for normal
-            data[0] = 0xAA;
-            data[1] = 0XAA;
-            data[2] = 0X03;
-            data[3] = 0X00;
-            data[4] = 0X00;
-            data[5] = 0X00;
-            data[6] = 0X08;
-            data[7] = 0X00;
-
-
-            // source ip addr
-            data[L3_start + 0] = 0;
-            data[L3_start + 0] = 0;
-            data[L3_start + 0] = 0;
-            data[L3_start + 0] = src_ip;
-
-            // dest ip addr
-            data[L3_start + 0] = 0;
-            data[L3_start + 0] = 0;
-            data[L3_start + 0] = 0;
-            data[L3_start + 0] = dst_ip;
-
-            for( int i = 0; i < 10; i ++)
+            IP_NC_Frame sending_frame = ap_handle.get_Next();
+            if(ap_handle.has_Matching_Frame(sending_frame))
             {
-                data[data_start + i] = data_to_send[i];
+                IP_NC_Frame frame_to_code = ap_handle.get_NC_Frame();
+
+                //set NC header and LLC header
+                data_start = LLC_Header_Size + NC_L25_Header_Size + L3_Header_Size;
+                L3_start = data_start - L3_Header_Size;
+
+                // LLC Header for layer 2.5
+                data[0] = 0xAA;
+                data[1] = 0XAA;
+                data[2] = 0X03;
+                data[3] = 0XAA;
+                data[4] = 0XAA;
+                data[5] = 0XAA;
+                data[6] = 0XAA;
+                data[7] = 0XAA;
+
+                // NC Header for data
+                data[8] = seq_num1/256;
+                data[9] = seq_num1;
+                data[10] = seq_num2/256;
+                data[11] = seq_num2;
+                data[12] = 0;
+                data[13] = 0;
+                data[14] = 0;
+                data[15] = ip_addr1;
+                data[16] = 0;
+                data[17] = 0;
+                data[18] = 0;
+                data[19] = ip_addr2;
+
+                data[L3_start + 0] = 0;
+                data[L3_start + 0] = 0;
+                data[L3_start + 0] = 0;
+                data[L3_start + 0] = sending_frame.ip_src^frame_to_code.ip_src;
+
+                data[L3_start + 0] = 0;
+                data[L3_start + 0] = 0;
+                data[L3_start + 0] = 0;
+                data[L3_start + 0] = sending_frame.ip_dst^frame_to_code.ip_dst;
+
+                for( int i = 0; i < 11; i ++)
+                {
+                    data[data_start + i] = sending_frame.data[i]^frame_to_code.data[i];
+                } 
+
+                toAddr[0] = 0xFF;
+                toAddr[1] = 0xFF;
+                toAddr[2] = 0xFF;
+                toAddr[3] = 0xFF;
+                toAddr[4] = 0xFF;
+                toAddr[5] = 0xFF;
+            }
+            else
+            {
+
+                //set LLC header to standard val
+                data_start = LLC_Header_Size + L3_Header_Size;
+                L3_start = data_start - L3_Header_Size;
+
+                //LLC Header for normal
+                data[0] = 0xAA;
+                data[1] = 0XAA;
+                data[2] = 0X03;
+                data[3] = 0X00;
+                data[4] = 0X00;
+                data[5] = 0X00;
+                data[6] = 0X08;
+                data[7] = 0X00;
+
+
+                // source ip addr
+                data[L3_start + 0] = 0;
+                data[L3_start + 1] = 0;
+                data[L3_start + 2] = 0;
+                data[L3_start + 3] = sending_frame.ip_src;
+
+                // dest ip addr
+                data[L3_start + 4] = 0;
+                data[L3_start + 5] = 0;
+                data[L3_start + 6] = 0;
+                data[L3_start + 7] = sending_frame.ip_dst;
+
+                for( int i = 0; i < 11; i ++)
+                {
+                    data[data_start + i] = data_to_send[i];
+                }
+
+                std::vector<uint8_t> to_mac = IP_to_MAC_map[sending_frame.ip_dst]
+
+                toAddr[0] = to_mac[0];
+                toAddr[1] = to_mac[1];
+                toAddr[2] = to_mac[2];
+                toAddr[3] = to_mac[3];
+                toAddr[4] = to_mac[4];
+                toAddr[5] = to_mac[5];
+
+
             }
         }
-
-        status = handler.send_frame(data, toAddr[toIP], apAddr, sizeof(data));
+        status = handler.send_frame(data, toAddr, apAddr, sizeof(data));
         
         total_frame++;
 
@@ -1898,9 +2120,7 @@ void Test_NC_AP_00(bool use_NC)
         case 0:
             success_frame++;
  //           std::cout << std::endl << "        [Host] Success! " << success_frame << "/" << total_frame << std::endl;
-            int seq_num_sent = handler.get_seq_num();
-            vector<uint8_t> to_remember(data + data_start, data + data_start + 11)
-            NC_data_remembered.insert(std::pair<int,vector<uint8_t>(seq_num_sent, to_remember));
+            ap_handle.pop_Next_Frame();
             break;
         case -1:  
             std::cout << std::endl << "            [Host] Failure. discard." << std::endl;
