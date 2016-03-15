@@ -33,6 +33,8 @@ struct Mac_setting
     unsigned short MCS_index;
     bool is_FPGA_callback_used;
     bool is_AP;
+    bool queue_frames;
+    std::queue<RX_datagram> *frame_queue;
 };
 
 struct Mac_status
@@ -63,15 +65,15 @@ public :
     void set_AP(bool is_set_to_AP);
     int send_frame(uint8_t* payload, uint8_t* des_addr, uint8_t* AP_addr, uint16_t length);
     void set_AP_addr(uint8_t adx[6]);
-    int get_seq_num(); // Get the seq number of the most recently sent frame 
+    int get_seq_num(); // Get the seq number of the most recently sent frame
+    void set_frame_queue(std::queue<RX_datagram> *queue_for_frames);
 
     //set up callback function when a frame is received, it will be used by main.cpp
     typedef void(*MAC_CallbackFunctionPtr)(void*, RX_datagram*);
     void mac_setRxCallback_context(MAC_CallbackFunctionPtr, void * context);
     MAC_CallbackFunctionPtr m_upper_mac_callback_helper;  //the function is going to be called
-    void * m_upper_mac_context; // the context it is going to be called in main
-    void mac_setRxCallback(void (*rx_callback) (struct RX_datagram* data, const std::queue<RX_datagram> &received_data));    
-        
+    void * m_upper_mac_context; // the context it is going to be called in main   
+    void mac_setRxCallback(void (*rx_callback) (struct RX_datagram* data));
     friend class Dcf_handler; //so that dcf can access queue
 private:
     void * MAC_TX_thread();     

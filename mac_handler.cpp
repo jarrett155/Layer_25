@@ -28,6 +28,7 @@ Mac_handler::Mac_handler()
     rate_adapt_para.failure_threshold = 2;
     rate_adapt_para.threshold_multiple = 2;
     mac_settings.rate_adapt_switch = false;
+    mac_settings.queue_frames = false;
     
     receiver_buffer_length = 0;
     
@@ -443,6 +444,10 @@ void Mac_handler::mac_RX_callback(RX_mac_frame * rx_frame)
         deliver_data.data_size = receiver_buffer_length;
         deliver_data.source_addr = rx_frame->frame->header.addr2;
         deliver_data.seq_num = curr_seq_num;
+        if (mac_settings.queue_frames)
+        {
+            mac_settings.frame_queue->push(deliver_data);
+        }
         mac_rx_call_up(&deliver_data);     
     #ifdef MAC_RX_CONTENT_LOGGING_ENABLED        
         rx_content_log_info(mac_settings.my_mac_addr,"\t\t\t\t\t%-8d  size %d\n",receiver_buffer[0],deliver_data.data_size); 
@@ -624,10 +629,9 @@ uint16_t Mac_handler::create_from_AP_frame(uint8_t* data,uint16_t length, uint8_
     return frame_length;        
 }
 
-int get_seq_num()
+int Mac_handler::get_seq_num()
 {
-    seq_ctrl = mac_status.seq_number%SEQUENCE_NUM_MOD
-    return seq_ctrl
+    return mac_status.seq_number%SEQUENCE_NUM_MOD;
 }
 
 uint16_t Mac_handler::create_to_AP_frame(uint8_t* data,uint16_t length, uint8_t* DA, uint8_t* AP)
@@ -682,7 +686,7 @@ void Mac_handler::mac_setRxCallback_context(MAC_CallbackFunctionPtr rx_callback_
 }
 
 /** setting callback function to MAC, set by MAC*/
-void Mac_handler::mac_setRxCallback(void (*rx_callback) (struct RX_datagram* data, const std::queue<RX_datagram> &received_data)){
+void Mac_handler::mac_setRxCallback(void (*rx_callback) (struct RX_datagram* data)){
     this->mac_rx_call_up = rx_callback;
 }
 
@@ -776,3 +780,9 @@ void Mac_handler::set_PHY_TX_MCS(unsigned short MCS_index)
 {
     mac_settings.MCS_index = MCS_index;
 }
+
+ void Mac_handler::set_frame_queue(std::queue<RX_datagram> *queue_for_frames)
+ {
+     mac_settings.frame_queue = queue_for_frames;
+     mac_settings.queue_frames = true;
+ }

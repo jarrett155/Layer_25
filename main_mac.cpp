@@ -113,7 +113,7 @@ void Test_Relay_BB();
 void Test_Relay_CC();
 void Test_NC_AA();
 void Test_NC_BB();
-void Test_NC_AP_00();
+void Test_NC_AP_00(bool use_NC);
 
 int main(int argc, char *argv[]){
     int desiredTest  = -1;
@@ -194,7 +194,7 @@ int main(int argc, char *argv[]){
             Test_NC_BB();
             break;
         case 18:
-            Test_NC_AP_00();
+            Test_NC_AP_00(true);
             break;
         default:
             break;
@@ -207,10 +207,12 @@ int main(int argc, char *argv[]){
 
 //AP HANDLER CODE. SHOULD ADD TO OWN FILE BUT CMAKE
 
-void ack_Timeout(int & must_retransmit)
+void* ack_Timeout(void *must_retransmit)
 {
+    
     usleep(1000*ACK_TIMEOUT_MS);
-    must_retransmit = true;
+    *((bool*)must_retransmit) = true;
+    return NULL;
 }
 
 AP_Handler::AP_Handler()
@@ -329,7 +331,8 @@ void AP_Handler::set_NC_Ack(int seq_num, int ip_to)
     destinations[index_of_dst].data_needs_ack = destinations[index_of_dst].to_send.front();
     destinations[index_of_dst].seq_need_ack = seq_num;
     destinations[index_of_dst].must_retransmit = false;
-    pthread_create(&destinations[index_of_dst].timeout_id, NULL, ack_Timeout, &destinations[index_of_dst].must_retransmit);
+    void *timer_arg = &(destinations[index_of_dst].must_retransmit);
+    pthread_create(&destinations[index_of_dst].timeout_id, NULL, ack_Timeout, timer_arg);
 
 }
 
@@ -1438,12 +1441,11 @@ void Test_Relay_CC()
 //##########################################################################
 /** function to be called by MAC to deliver data*/
 
-void mac_NC_receiver(RX_datagram * mac_data, std::queue<RX_datagram> &received_data)
+void mac_NC_receiver(RX_datagram * mac_data)
 {
     // process data
-    received_data.push(*mac_data);
     printf ("%d\n", total_rx_frame++);
-    //printf("        receive data %s\n",mac_data->data); 
+    printf("        receive data %s\n",mac_data->data); 
     return;
 }
 
@@ -1495,7 +1497,7 @@ void Test_NC_AA()
            
     Mac_handler handler;
     std::queue<RX_datagram> received_data;
-    void mac_NC_receiver(RX_datagram * mac_data, std::queue<RX_datagram> & received_data);
+    void mac_NC_receiver(RX_datagram * mac_data);
     handler.mac_setRxCallback(mac_NC_receiver);
     handler.set_myadx(myAddr);
     handler.set_PHY_TX_MCS(TEST_MCS_INDEX);
@@ -1690,7 +1692,7 @@ void Test_NC_BB()
     int LLC_Header_Size = 8;
     int NC_L25_Header_Size = 2;
     int L3_Header_Size = 8;
-    const int max_frames_rememebered = 1000;
+    // const int max_frames_rememebered = 1000;
     int data_start;
     int L3_start;
     int myip = 2;
@@ -1726,7 +1728,7 @@ void Test_NC_BB()
            
     Mac_handler handler;
     std::queue<RX_datagram> received_data;
-    void mac_NC_receiver(RX_datagram * mac_data, std::queue<RX_datagram> & received_data);
+    void mac_NC_receiver(RX_datagram * mac_data);
     handler.mac_setRxCallback(mac_NC_receiver);
     handler.set_myadx(myAddr);
     handler.set_PHY_TX_MCS(TEST_MCS_INDEX);
@@ -1946,28 +1948,26 @@ void Test_NC_AP_00(bool use_NC)
     toAddr[4] = 0xFF;
     toAddr[5] = 0xFF;
 
-    std::vector<uint8_t> MAC_addr(toAddr, sizeof(toAddr) / sizeof(uint8_t));
+    std::vector<uint8_t> MAC_addr(toAddr, toAddr + sizeof(toAddr) / sizeof(uint8_t));
     IP_to_MAC_map.insert(std::pair<int,std::vector<uint8_t> >(2, MAC_addr));
 
     
-    toAddr[0] = 0xAA;
-    toAddr[1] = 0xAA;
-    toAddr[2] = 0xAA;
-    toAddr[3] = 0xAA;
-    toAddr[4] = 0xAA;
-    toAddr[5] = 0xAA;
+    MAC_addr[0] = 0xAA;
+    MAC_addr[1] = 0xAA;
+    MAC_addr[2] = 0xAA;
+    MAC_addr[3] = 0xAA;
+    MAC_addr[4] = 0xAA;
+    MAC_addr[5] = 0xAA;
 
-    std::vector<uint8_t> MAC_addr(toAddr, sizeof(toAddr) / sizeof(uint8_t));
     IP_to_MAC_map.insert(std::pair<int,std::vector<uint8_t> >(2, MAC_addr));
 
-    toAddr[0] = 0xBB;
-    toAddr[1] = 0xBB;
-    toAddr[2] = 0xBB;
-    toAddr[3] = 0xBB;
-    toAddr[4] = 0xBB;
-    toAddr[5] = 0xBB;
+    MAC_addr[0] = 0xBB;
+    MAC_addr[1] = 0xBB;
+    MAC_addr[2] = 0xBB;
+    MAC_addr[3] = 0xBB;
+    MAC_addr[4] = 0xBB;
+    MAC_addr[5] = 0xBB;
     
-    std::vector<uint8_t> MAC_addr(toAddr, sizeof(toAddr) / sizeof(uint8_t));
     IP_to_MAC_map.insert(std::pair<int,std::vector<uint8_t> >(2, MAC_addr));
     
     apAddr[0] = 0x00;
@@ -1979,7 +1979,7 @@ void Test_NC_AP_00(bool use_NC)
            
     Mac_handler handler;
     std::queue<RX_datagram> received_data;
-    void mac_NC_receiver(RX_datagram * mac_data, std::queue<RX_datagram> & received_data);
+    void mac_NC_receiver(RX_datagram * mac_data);
 
     AP_Handler ap_handle;
 
@@ -1998,7 +1998,8 @@ void Test_NC_AP_00(bool use_NC)
 
         if (!received_data.empty())
         {
-            RX_datagram NC_frame = received_data.pop();
+            RX_datagram NC_frame = received_data.front();
+            received_data.pop();
             if(NC_frame.data[6] == 0xAA && NC_frame.data[7] == 0xAA)
             {
                 int seq_num_ack = 256*NC_frame.data[8] + NC_frame.data[9];
@@ -2013,7 +2014,8 @@ void Test_NC_AP_00(bool use_NC)
             }
             else
             {
-
+                int ip_src = 256*256*256*NC_frame.data[8] + 256*256*NC_frame.data[9] + 256*NC_frame.data[10] + NC_frame.data[11];
+                int ip_dst = 256*256*256*NC_frame.data[12] + 256*256*NC_frame.data[13] + 256*NC_frame.data[14] + NC_frame.data[15];
                 std::vector<uint8_t> data_vector(NC_frame.data + 18, NC_frame.data + 18 + 11);
                 ap_handle.received_Frame(NC_frame.seq_num, ip_dst, ip_src, data_vector);
 
