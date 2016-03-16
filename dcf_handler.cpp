@@ -372,7 +372,17 @@ int Dcf_handler::tx_frame(){
             m_tx_packet.mode = IEEE80211TVWSModes(curr_record->current_rate);
         }
         memcpy(m_tx_packet.buffer,(uint8_t*)&(frame_txing.frame),frame_txing.framesize);
-        dcf_status.need_ack = true;
+
+        if( frame_txing.frame.header.addr1[0] == 0XFF && frame_txing.frame.header.addr1[1] == 0XFF 
+            && frame_txing.frame.header.addr1[2] == 0XFF && frame_txing.frame.header.addr1[3] == 0XFF 
+            && frame_txing.frame.header.addr1[4] == 0XFF && frame_txing.frame.header.addr1[5] == 0XFF)
+        {
+            dcf_status.need_ack = true;
+        }
+        else
+        {
+            dcf_status.need_ack = false;
+        }
         dcf_status.have_ack = false;
 
         //Check for DIFS, only if it is the first frame in queue, also it has to be the first tx

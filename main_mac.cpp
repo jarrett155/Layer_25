@@ -118,7 +118,7 @@ void Test_NC_AP_00(bool use_NC);
 int main(int argc, char *argv[]){
     int desiredTest  = -1;
 
-    while(desiredTest<1 || desiredTest>15){
+    while(desiredTest<1 || desiredTest>18){
         std::cout << "Select desired application: \n";
         std::cout << "   1) DCF test MACaddr = 0xAA, send to 0xBB\n";
         std::cout << "   2) DCF test MACaddr = 0xBB, send to 0xAA\n";
@@ -1499,6 +1499,7 @@ void Test_NC_AA()
     std::queue<RX_datagram> received_data;
     void mac_NC_receiver(RX_datagram * mac_data);
     handler.mac_setRxCallback(mac_NC_receiver);
+    handler.set_frame_queue(&received_data);
     handler.set_myadx(myAddr);
     handler.set_PHY_TX_MCS(TEST_MCS_INDEX);
     handler.set_AP(false);
@@ -1729,6 +1730,7 @@ void Test_NC_BB()
     Mac_handler handler;
     std::queue<RX_datagram> received_data;
     void mac_NC_receiver(RX_datagram * mac_data);
+    handler.set_frame_queue(&received_data);
     handler.mac_setRxCallback(mac_NC_receiver);
     handler.set_myadx(myAddr);
     handler.set_PHY_TX_MCS(TEST_MCS_INDEX);
@@ -1982,7 +1984,7 @@ void Test_NC_AP_00(bool use_NC)
     void mac_NC_receiver(RX_datagram * mac_data);
 
     AP_Handler ap_handle;
-
+    handler.set_frame_queue(&received_data);
     handler.mac_setRxCallback(mac_NC_receiver);
     handler.set_myadx(myAddr);
     handler.set_PHY_TX_MCS(TEST_MCS_INDEX);
@@ -2032,7 +2034,7 @@ void Test_NC_AP_00(bool use_NC)
         if(ap_handle.AP_Has_Next())
         {
             IP_NC_Frame sending_frame = ap_handle.get_Next();
-            if(ap_handle.has_Matching_Frame(sending_frame))
+            if(ap_handle.has_Matching_Frame(sending_frame) && use_NC)
             {
                 IP_NC_Frame frame_to_code = ap_handle.get_NC_Frame();
 
@@ -2136,27 +2138,28 @@ void Test_NC_AP_00(bool use_NC)
                 toAddr[5] = to_mac[5];
 
 
-            }
+            }        
+            status = handler.send_frame(data, toAddr, apAddr, sizeof(data));
+            
+            total_frame++;
+
+
+
+            switch(status){
+            case 0:
+                success_frame++;
+                std::cout << std::endl << "        [Host] Success! " << success_frame << "/" << total_frame << std::endl;
+                ap_handle.pop_Next_Frame();
+                break;
+            case -1:  
+                std::cout << std::endl << "            [Host] Failure. discard." << std::endl;
+                break;
+            case -2:
+                std::cout << std::endl << "            [Host] Failure! (busy)" << std::endl;
+                break;   
+            }     
         }
-        status = handler.send_frame(data, toAddr, apAddr, sizeof(data));
-        
-        total_frame++;
-
-
-
-        switch(status){
-        case 0:
-            success_frame++;
- //           std::cout << std::endl << "        [Host] Success! " << success_frame << "/" << total_frame << std::endl;
-            ap_handle.pop_Next_Frame();
-            break;
-        case -1:  
-            std::cout << std::endl << "            [Host] Failure. discard." << std::endl;
-            break;
-        case -2:
-  //          std::cout << std::endl << "            [Host] Failure! (busy)" << std::endl;
-            break;   
-        }          
+     
     }
     
 }
