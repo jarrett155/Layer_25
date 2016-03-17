@@ -373,9 +373,7 @@ int Dcf_handler::tx_frame(){
         }
         memcpy(m_tx_packet.buffer,(uint8_t*)&(frame_txing.frame),frame_txing.framesize);
 
-        if( frame_txing.frame.header.addr1[0] == 0XFF && frame_txing.frame.header.addr1[1] == 0XFF 
-            && frame_txing.frame.header.addr1[2] == 0XFF && frame_txing.frame.header.addr1[3] == 0XFF 
-            && frame_txing.frame.header.addr1[4] == 0XFF && frame_txing.frame.header.addr1[5] == 0XFF)
+        if(0 == memcmp(frame_txing.frame.header.addr1, dcf_settings.broadcast_adx, MAC_ADDR_LENGTH))
         {
             dcf_status.need_ack = false;
         }
