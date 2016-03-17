@@ -46,7 +46,6 @@ struct IP_NC_Frame
     int ip_src, ip_dst;
     int seq_num_from;
     std::vector<uint8_t> data;
-
 };
 
 
@@ -74,6 +73,7 @@ class AP_Handler
     int pop_nc_dest;
     int nc_dest_popped;
     bool retransmit;
+    int start;
 
 
 public:
@@ -194,7 +194,7 @@ int main(int argc, char *argv[]){
             Test_NC_BB();
             break;
         case 18:
-            Test_NC_AP_00(true);
+            Test_NC_AP_00(false);
             break;
         default:
             break;
@@ -250,10 +250,14 @@ void AP_Handler::received_Frame(int seq_num, int ip_dst, int ip_src, std::vector
     // if not add a new destination node to AP handler
     else
     {
+        std::cout << "\n\n\ncreating new dest " << ip_dst << "\n\n\n\n";
+        
         NC_Dest new_dest;
         new_dest.waiting_for_ack = false;
         new_dest.seq_need_ack = 0;
         new_dest.size = 1;
+        new_dest.must_retransmit = false;
+        IP_to_index_map[ip_dst] = current_size;
         IP_NC_Frame frame_received;
         frame_received.ip_src = ip_src;
         frame_received.ip_dst = ip_dst;
@@ -299,7 +303,8 @@ IP_NC_Frame AP_Handler::get_NC_Frame()
 // Get the next frame that will be sent by the AP
 IP_NC_Frame AP_Handler::get_Next()
 {
-    int start = current_destination;
+    //std::cout << "setting start";
+    start = current_destination;
 
     do 
     {
@@ -312,11 +317,17 @@ IP_NC_Frame AP_Handler::get_Next()
     } while(destinations[current_destination].size < 1 && current_destination != start);
     if (destinations[current_destination].size > 0)
     {
+        //std::cout << "returning frame to send\n";
+        //std::cout << "current dest is " << current_destination;
+        //std::cout << " current size is " << current_size;
+        //std::cout << " current frames to send is " << frames_to_send;
+        
         return destinations[current_destination].to_send.front();
     }
     else
     {
         //need to fix this
+        std::cout<< "bad shit";
         IP_NC_Frame hi;
         return hi;
     }
@@ -342,18 +353,19 @@ void AP_Handler::pop_Next_Frame()
 {
     if(!retransmit)
     {
+        std::cout<< "frame popped " <<frames_to_send - 1<< " frames left \n";
         destinations[current_destination].to_send.pop();
         frames_to_send --;
     }
     else
         retransmit = false;
-    current_destination = (current_destination + 1) % current_size;
     if(nc_dest_popped == 0)
     {
         destinations[pop_nc_dest].to_send.pop();
         nc_dest_popped = 1;
         frames_to_send --;
     }
+    //std::cout <<"done popping\n";
 }
 
 // This function is used to ack a frame that was previously sent as an NC frame.
@@ -1444,8 +1456,8 @@ void Test_Relay_CC()
 void mac_NC_receiver(RX_datagram * mac_data)
 {
     // process data
-    printf ("%d\n", total_rx_frame++);
-    printf("        receive data %s\n",mac_data->data); 
+    //printf ("%d\n", total_rx_frame++);
+    //printf("        receive data %s\n", mac_data->data + 16); 
     return;
 }
 
@@ -1793,7 +1805,8 @@ void Test_NC_BB()
             }
             else
             {
-                printf("      receive data %s\n", NC_frame.data); 
+                printf("      receive data %s\n", NC_frame.data);
+                
             }
         }
         //data[0] = total_frame%256;
@@ -1864,13 +1877,13 @@ void Test_NC_BB()
             data[L3_start + 0] = 0;
             data[L3_start + 1] = 0;
             data[L3_start + 2] = 0;
-            data[L3_start + 3] = 1;
+            data[L3_start + 3] = 2;
 
             // dest ip addr
             data[L3_start + 4] = 0;
             data[L3_start + 5] = 0;
             data[L3_start + 6] = 0;
-            data[L3_start + 7] = 2;
+            data[L3_start + 7] = 1;
 
 
             data[data_start + 0] = 'F';
@@ -1951,7 +1964,7 @@ void Test_NC_AP_00(bool use_NC)
     toAddr[5] = 0xFF;
 
     std::vector<uint8_t> MAC_addr(toAddr, toAddr + sizeof(toAddr) / sizeof(uint8_t));
-    IP_to_MAC_map.insert(std::pair<int,std::vector<uint8_t> >(2, MAC_addr));
+    IP_to_MAC_map.insert(std::pair<int,std::vector<uint8_t> >(0, MAC_addr));
 
     
     MAC_addr[0] = 0xAA;
@@ -1961,7 +1974,7 @@ void Test_NC_AP_00(bool use_NC)
     MAC_addr[4] = 0xAA;
     MAC_addr[5] = 0xAA;
 
-    IP_to_MAC_map.insert(std::pair<int,std::vector<uint8_t> >(2, MAC_addr));
+    IP_to_MAC_map.insert(std::pair<int,std::vector<uint8_t> >(1, MAC_addr));
 
     MAC_addr[0] = 0xBB;
     MAC_addr[1] = 0xBB;
@@ -1990,6 +2003,7 @@ void Test_NC_AP_00(bool use_NC)
     handler.set_PHY_TX_MCS(TEST_MCS_INDEX);
     handler.set_AP(false);
     handler.start_mac();
+    IP_NC_Frame sending_frame;
 
     int total_frame = 0, success_frame = 0;
     std::cout << std::endl << "            [Host] is transmitting." << std::endl;
@@ -2018,10 +2032,10 @@ void Test_NC_AP_00(bool use_NC)
             {
                 int ip_src = 256*256*256*NC_frame.data[8] + 256*256*NC_frame.data[9] + 256*NC_frame.data[10] + NC_frame.data[11];
                 int ip_dst = 256*256*256*NC_frame.data[12] + 256*256*NC_frame.data[13] + 256*NC_frame.data[14] + NC_frame.data[15];
-                std::vector<uint8_t> data_vector(NC_frame.data + 18, NC_frame.data + 18 + 11);
+                std::vector<uint8_t> data_vector(NC_frame.data + 16, NC_frame.data + 16 + 11);
                 ap_handle.received_Frame(NC_frame.seq_num, ip_dst, ip_src, data_vector);
 
-                printf("      receive data %s\n", NC_frame.data); 
+                //printf("      receive data %s\n", NC_frame.data); 
             }
         }
 
@@ -2031,11 +2045,15 @@ void Test_NC_AP_00(bool use_NC)
         uint32_t delay = (rand()%30)*FRAME_IDLE_UNIT;
         usleep(delay);        
   //    std::cout << std::endl << "            [Host] START new frame" << std::endl;
-        if(ap_handle.AP_Has_Next())
+        //std::cout<<"checking for next frame\n";
+        if(ap_handle.AP_Has_Next() > 0)
         {
-            IP_NC_Frame sending_frame = ap_handle.get_Next();
+            //std::cout << "getting next frame\n";
+            sending_frame = ap_handle.get_Next();
+            //std::cout << "got frame\n";
             if(ap_handle.has_Matching_Frame(sending_frame) && use_NC)
             {
+                std::cout << "\n\n\n\n NC!!!!!!!!!!!!!!!!!!!!! \n\n\n\n";
                 IP_NC_Frame frame_to_code = ap_handle.get_NC_Frame();
 
                 //set NC header and LLC header
@@ -2099,7 +2117,7 @@ void Test_NC_AP_00(bool use_NC)
                 //set LLC header to standard val
                 data_start = LLC_Header_Size + L3_Header_Size;
                 L3_start = data_start - L3_Header_Size;
-
+                //std::cout<< "making header\n";
                 //LLC Header for normal
                 data[0] = 0xAA;
                 data[1] = 0XAA;
@@ -2123,23 +2141,28 @@ void Test_NC_AP_00(bool use_NC)
                 data[L3_start + 6] = 0;
                 data[L3_start + 7] = sending_frame.ip_dst;
 
-                for( int i = 0; i < 11; i ++)
+                //std::cout << sending_frame.data.size() << " getting data\n";
+                for( unsigned int i = 0; i < sending_frame.data.size(); i ++)
                 {
+                    std::cout << sending_frame.data[i];
                     data[data_start + i] = sending_frame.data[i];
                 }
-
+                //std::cout <<  "getting addr\n";
                 std::vector<uint8_t> to_mac = IP_to_MAC_map[sending_frame.ip_dst];
-
+                //std::cout << "setting addr\n";
                 toAddr[0] = to_mac[0];
                 toAddr[1] = to_mac[1];
                 toAddr[2] = to_mac[2];
                 toAddr[3] = to_mac[3];
                 toAddr[4] = to_mac[4];
                 toAddr[5] = to_mac[5];
+                //std::cout<< "going to " << (int)toAddr[4] << (int)toAddr[5] << "\n";
 
 
-            }        
+            }
+            //std::cout << "about to send\n";
             status = handler.send_frame(data, toAddr, apAddr, sizeof(data));
+            //std::cout << "just sent\n";
             
             total_frame++;
 

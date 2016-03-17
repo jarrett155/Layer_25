@@ -377,11 +377,11 @@ int Dcf_handler::tx_frame(){
             && frame_txing.frame.header.addr1[2] == 0XFF && frame_txing.frame.header.addr1[3] == 0XFF 
             && frame_txing.frame.header.addr1[4] == 0XFF && frame_txing.frame.header.addr1[5] == 0XFF)
         {
-            dcf_status.need_ack = true;
+            dcf_status.need_ack = false;
         }
         else
         {
-            dcf_status.need_ack = false;
+            dcf_status.need_ack = true;
         }
         dcf_status.have_ack = false;
 
