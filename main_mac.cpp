@@ -194,7 +194,7 @@ int main(int argc, char *argv[]){
             Test_NC_BB();
             break;
         case 18:
-            Test_NC_AP_00(false);
+            Test_NC_AP_00(true);
             break;
         default:
             break;
@@ -236,6 +236,7 @@ void AP_Handler::received_Frame(int seq_num, int ip_dst, int ip_src, std::vector
     // check if we have seen this ip before
     if (IP_to_index_map.count(ip_dst))
     {
+        //std::cout << "\ndest exists " << ip_dst <<" out of " << IP_to_index_map.size() << "\n\n\n";
         int index_of_dst = IP_to_index_map[ip_dst];
         IP_NC_Frame frame_received;
         frame_received.ip_src = ip_src;
@@ -273,20 +274,31 @@ void AP_Handler::received_Frame(int seq_num, int ip_dst, int ip_src, std::vector
 // Find if a frame can be network coded with frame_to_match
 bool AP_Handler::has_Matching_Frame(IP_NC_Frame frame_to_match)
 {
+    //std::cout << "checking for nc\n";
     if (destinations[current_destination].waiting_for_ack)
     {
+        //std::cout << "no NC, waiting for ack\n";
         return false;
     }
     else
     {
         int nc_dest = frame_to_match.ip_src;
-        int nc_dest_index = IP_to_index_map[nc_dest];
-        if( !destinations[nc_dest_index].waiting_for_ack && destinations[nc_dest_index].to_send.front().ip_src == frame_to_match.ip_dst)
+        if(IP_to_index_map.count(nc_dest))
         {
-            nc_dest_popped = 0;
-            pop_nc_dest = nc_dest;
-            to_code = destinations[nc_dest_index].to_send.front();
-            return true;
+            int nc_dest_index = IP_to_index_map[nc_dest];
+            if(destinations[nc_dest_index].size > 0)
+            {
+                if( !destinations[nc_dest_index].waiting_for_ack && destinations[nc_dest_index].to_send.front().ip_src == frame_to_match.ip_dst)
+                {
+                    //std::cout << "\n\n\n\nwooooo NC"<< current_destination <<" " << nc_dest <<"\n\n\n\n\n";
+
+                    nc_dest_popped = 0;
+                    pop_nc_dest = nc_dest_index;
+                    to_code = destinations[nc_dest_index].to_send.front();
+                    //std::cout << "found code frame\n\n";
+                    return true;
+                }
+            }
         }
     }
     return false;
@@ -319,15 +331,17 @@ IP_NC_Frame AP_Handler::get_Next()
     {
         //std::cout << "returning frame to send\n";
         //std::cout << "current dest is " << current_destination;
-        //std::cout << " current size is " << current_size;
+        //std::cout << " \ncurrent size is " << current_size;
         //std::cout << " current frames to send is " << frames_to_send;
+        //std::cout << " current dest size " << destinations[current_destination].to_send.size();
+        
         
         return destinations[current_destination].to_send.front();
     }
     else
     {
         //need to fix this
-        std::cout<< "bad shit";
+        std::cout<< "bad news gonna crash";
         IP_NC_Frame hi;
         return hi;
     }
@@ -353,15 +367,19 @@ void AP_Handler::pop_Next_Frame()
 {
     if(!retransmit)
     {
-        std::cout<< "frame popped " <<frames_to_send - 1<< " frames left \n";
+        //std::cout<< "frame popped " <<frames_to_send - 1<< " frames left \n";
         destinations[current_destination].to_send.pop();
+        destinations[current_destination].size --;
         frames_to_send --;
     }
     else
         retransmit = false;
     if(nc_dest_popped == 0)
     {
+        //std::cout << "\n" << pop_nc_dest << " dest popped for nc its size " << destinations[pop_nc_dest].to_send.size()
+        //        << "other size" << destinations[pop_nc_dest].size << "\n";
         destinations[pop_nc_dest].to_send.pop();
+        destinations[pop_nc_dest].size --;
         nc_dest_popped = 1;
         frames_to_send --;
     }
@@ -1935,6 +1953,7 @@ void Test_NC_AP_00(bool use_NC)
     uint8_t toAddr[6];
     uint8_t apAddr[6];
     uint8_t data[DATA_SIZE];
+    int count = 0;
     
     int LLC_Header_Size = 8;
     int NC_L25_Header_Size = 12;
@@ -2011,13 +2030,14 @@ void Test_NC_AP_00(bool use_NC)
 
     //  Do experiment here by sending frames
     while(1){
-
+        count = count + 1;
         if (!received_data.empty())
         {
             RX_datagram NC_frame = received_data.front();
             received_data.pop();
             if(NC_frame.data[6] == 0xAA && NC_frame.data[7] == 0xAA)
             {
+                std::cout << "receivd NC ack";
                 int seq_num_ack = 256*NC_frame.data[8] + NC_frame.data[9];
                 int ip_src = 256*256*256*NC_frame.data[10] + 256*256*NC_frame.data[11] + 256*NC_frame.data[12] + NC_frame.data[13];
                 int ip_dst = 256*256*256*NC_frame.data[14] + 256*256*NC_frame.data[15] + 256*NC_frame.data[16] + NC_frame.data[17];
@@ -2046,7 +2066,7 @@ void Test_NC_AP_00(bool use_NC)
         usleep(delay);        
   //    std::cout << std::endl << "            [Host] START new frame" << std::endl;
         //std::cout<<"checking for next frame\n";
-        if(ap_handle.AP_Has_Next() > 0)
+        if(ap_handle.AP_Has_Next() > 0 && (count % 2) == 0)
         {
             //std::cout << "getting next frame\n";
             sending_frame = ap_handle.get_Next();
