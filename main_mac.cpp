@@ -46,6 +46,7 @@ struct NC_Client_Data {
     std::map<int,std::vector<uint8_t> > *NC_data_remembered;
     int seq_to_ack;
     bool needs_to_NC_ACK;
+    int myip;
 };
 
 struct IP_NC_Frame
@@ -1488,7 +1489,7 @@ void mac_NC_receiver(RX_datagram * mac_data)
 
 void* client_Rx_thread(void *client_data_arg)
 {
-    NC_Client_Data * client_data = client_data_arg;
+    NC_Client_Data *client_data = (NC_Client_Data*)client_data_arg;
     std::queue<RX_datagram> * received_data = client_data->received_data;
     std::map<int,std::vector<uint8_t> > * NC_data_remembered = client_data->NC_data_remembered;
     while(1)
@@ -1503,7 +1504,7 @@ void* client_Rx_thread(void *client_data_arg)
                 int seq_num2 = 256*NC_frame.data[10] + NC_frame.data[11];
                 int ip1 = 256*256*256*NC_frame.data[12] + 256*256*NC_frame.data[13] + 256*NC_frame.data[14] + NC_frame.data[15];
                 int ip2 = 256*256*256*NC_frame.data[16] + 256*256*NC_frame.data[17] + 256*NC_frame.data[18] + NC_frame.data[19];
-                if( ip1 == myip)
+                if( ip1 == client_data->myip)
                 {
                     if (NC_data_remembered->count(seq_num1))
                     {
@@ -1521,7 +1522,7 @@ void* client_Rx_thread(void *client_data_arg)
                     
 
                 }
-                else if(ip2 == myip)
+                else if(ip2 == client_data->myip)
                 {
                     if (NC_data_remembered->count(seq_num2))
                     {
@@ -1544,6 +1545,7 @@ void* client_Rx_thread(void *client_data_arg)
             }
         }
     }
+    return NULL;
 }
 
 
@@ -1563,7 +1565,7 @@ void Test_NC_AA()
     // const int max_frames_rememebered = 1000;
     int data_start;
     int L3_start;
-    int myip = 1;
+    client_data.myip = 1;
     std::map<int,std::vector<uint8_t> > NC_data_remembered;
     //std::map<int,std::vector<uint8_t> >::iterator it;
     client_data.NC_data_remembered = &NC_data_remembered;
@@ -1670,7 +1672,7 @@ void Test_NC_AA()
         uint32_t delay = (rand()%30)*FRAME_IDLE_UNIT;
         usleep(delay);        
   //    std::cout << std::endl << "            [Host] START new frame" << std::endl;
-        if(needs_to_NC_ACK)
+        if(client_data.needs_to_NC_ACK)
         {
             //set NC header and LLC header
             data_start = LLC_Header_Size + NC_L25_Header_Size + L3_Header_Size;
@@ -1687,8 +1689,8 @@ void Test_NC_AA()
             data[7] = 0XAA;
 
             // NC Header for ACK
-            data[8] = seq_to_ack/256;
-            data[9] = seq_to_ack;
+            data[8] = client_data.seq_to_ack/256;
+            data[9] = client_data.seq_to_ack;
 
             // source ip addr
             data[L3_start + 0] = 0;
@@ -1711,7 +1713,7 @@ void Test_NC_AA()
             data[data_start + 6] = 'A';
             data[data_start + 7] = 'A';
             data[data_start + 10] = '\0';
-            needs_to_NC_ACK = false;  
+            client_data.needs_to_NC_ACK = false;  
         }
         else
         {
@@ -1801,7 +1803,7 @@ void Test_NC_BB()
     // const int max_frames_rememebered = 1000;
     int data_start;
     int L3_start;
-    int myip = 2;
+    client_data.myip = 2;
     int seq_to_ack = 0;
     bool needs_to_NC_ACK = false;
     std::map<int,std::vector<uint8_t> > NC_data_remembered;
@@ -2119,7 +2121,7 @@ void Test_NC_AP_00(bool use_NC)
             if(NC_frame.data[6] == 0xAA && NC_frame.data[7] == 0xAA)
             {
                 std::cout << "receivd NC ack";
-                int seq_num_ack = 256*NC_frame.data[8] + NC_frame.data[9];
+                //int seq_num_ack = 256*NC_frame.data[8] + NC_frame.data[9];
                 int ip_src = 256*256*256*NC_frame.data[10] + 256*256*NC_frame.data[11] + 256*NC_frame.data[12] + NC_frame.data[13];
                 int ip_dst = 256*256*256*NC_frame.data[14] + 256*256*NC_frame.data[15] + 256*NC_frame.data[16] + NC_frame.data[17];
                 //ap_handle.ack_Frame(ip_src, seq_num_ack);
@@ -2213,7 +2215,8 @@ void Test_NC_AP_00(bool use_NC)
                 toAddr[5] = 0xFF;
                 //ap_handle.set_NC_Ack(sending_frame.seq_num_from, sending_frame.ip_dst);
                 //ap_handle.set_NC_Ack(frame_to_code.seq_num_from, frame_to_code.ip_dst);
-                std::cout << "coded frames so far: " << frames_coded ++ << "out of total" << frames_coded + frames_uncoded;
+                frames_coded++;
+                std::cout << "coded frames so far: " << frames_coded << "out of total" << frames_coded + frames_uncoded;
 
             }
             else
@@ -2262,7 +2265,8 @@ void Test_NC_AP_00(bool use_NC)
                 toAddr[4] = to_mac[4];
                 toAddr[5] = to_mac[5];
                 //std::cout<< "going to " << (int)toAddr[4] << (int)toAddr[5] << "\n";
-                std::cout << "uncoded frames so far: " << frames_uncoded++ << "out of total" << frames_coded + frames_uncoded;
+                frames_uncoded ++;
+                std::cout << "uncoded frames so far: " << frames_uncoded << "out of total" << frames_coded + frames_uncoded;
 
 
             }
