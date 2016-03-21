@@ -1954,6 +1954,8 @@ void Test_NC_AP_00(bool use_NC)
     uint8_t apAddr[6];
     uint8_t data[DATA_SIZE];
     int count = 0;
+    int frames_uncoded = 0;
+    int frames_coded = 0;
     
     int LLC_Header_Size = 8;
     int NC_L25_Header_Size = 12;
@@ -2041,7 +2043,7 @@ void Test_NC_AP_00(bool use_NC)
                 int seq_num_ack = 256*NC_frame.data[8] + NC_frame.data[9];
                 int ip_src = 256*256*256*NC_frame.data[10] + 256*256*NC_frame.data[11] + 256*NC_frame.data[12] + NC_frame.data[13];
                 int ip_dst = 256*256*256*NC_frame.data[14] + 256*256*NC_frame.data[15] + 256*NC_frame.data[16] + NC_frame.data[17];
-                ap_handle.ack_Frame(ip_src, seq_num_ack);
+                //ap_handle.ack_Frame(ip_src, seq_num_ack);
 
                 std::vector<uint8_t> data_vector(NC_frame.data + 18, NC_frame.data + 18 + 11);
                 ap_handle.received_Frame(NC_frame.seq_num, ip_dst, ip_src, data_vector);
@@ -2071,7 +2073,7 @@ void Test_NC_AP_00(bool use_NC)
             //std::cout << "getting next frame\n";
             sending_frame = ap_handle.get_Next();
             //std::cout << "got frame\n";
-            if(ap_handle.has_Matching_Frame(sending_frame) && use_NC)
+            if(use_NC && ap_handle.has_Matching_Frame(sending_frame))
             {
                 std::cout << "\n\n\n\n NC!!!!!!!!!!!!!!!!!!!!! \n\n\n\n";
                 IP_NC_Frame frame_to_code = ap_handle.get_NC_Frame();
@@ -2130,6 +2132,10 @@ void Test_NC_AP_00(bool use_NC)
                 toAddr[3] = 0xFF;
                 toAddr[4] = 0xFF;
                 toAddr[5] = 0xFF;
+                //ap_handle.set_NC_Ack(sending_frame.seq_num_from, sending_frame.ip_dst);
+                //ap_handle.set_NC_Ack(frame_to_code.seq_num_from, frame_to_code.ip_dst);
+                std::cout << "coded frames so far: " << frames_coded ++ << "out of total" << frames_coded + frames_uncoded;
+
             }
             else
             {
@@ -2177,6 +2183,7 @@ void Test_NC_AP_00(bool use_NC)
                 toAddr[4] = to_mac[4];
                 toAddr[5] = to_mac[5];
                 //std::cout<< "going to " << (int)toAddr[4] << (int)toAddr[5] << "\n";
+                std::cout << "uncoded frames so far: " << frames_uncoded++ << "out of total" << frames_coded + frames_uncoded;
 
 
             }
