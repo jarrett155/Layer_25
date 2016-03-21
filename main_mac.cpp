@@ -1500,6 +1500,7 @@ void* client_Rx_thread(void *client_data_arg)
             received_data->pop();
             if(NC_frame.data[6] == 0xAA && NC_frame.data[7] == 0xAA)
             {
+                std::cout << "\n need to NC ack! \n";
                 int seq_num1 = 256*NC_frame.data[8] + NC_frame.data[9];
                 int seq_num2 = 256*NC_frame.data[10] + NC_frame.data[11];
                 int ip1 = 256*256*256*NC_frame.data[12] + 256*256*NC_frame.data[13] + 256*NC_frame.data[14] + NC_frame.data[15];
@@ -1517,7 +1518,7 @@ void* client_Rx_thread(void *client_data_arg)
                         {
                             decoded_data.push_back(remembered_data[i]^NC_frame.data[20+i]);
                         }
-                        std::copy(decoded_data.begin(), decoded_data.end(), std::ostream_iterator<uint8_t>(std::cout, ""));
+                        //std::copy(decoded_data.begin(), decoded_data.end(), std::ostream_iterator<uint8_t>(std::cout, ""));
                     }
                     
 
@@ -1535,7 +1536,7 @@ void* client_Rx_thread(void *client_data_arg)
                         {
                             decoded_data.push_back(remembered_data[i]^NC_frame.data[20+i]);
                         }
-                        std::copy(decoded_data.begin(), decoded_data.end(), std::ostream_iterator<char>(std::cout, ""));
+                        //std::copy(decoded_data.begin(), decoded_data.end(), std::ostream_iterator<char>(std::cout, ""));
                     }
                 }
             }
@@ -1674,6 +1675,7 @@ void Test_NC_AA()
   //    std::cout << std::endl << "            [Host] START new frame" << std::endl;
         if(client_data.needs_to_NC_ACK)
         {
+            std::cout << "\n sending NC ack\n";
             //set NC header and LLC header
             data_start = LLC_Header_Size + NC_L25_Header_Size + L3_Header_Size;
             L3_start = data_start - L3_Header_Size;
@@ -1769,7 +1771,7 @@ void Test_NC_AA()
         case 0:
         {
             success_frame++;
- //           std::cout << std::endl << "        [Host] Success! " << success_frame << "/" << total_frame << std::endl;
+            std::cout << std::endl << "        [Host] Success! " << success_frame << "/" << total_frame << std::endl;
             int seq_num_sent = handler.get_seq_num();
             std::vector<uint8_t> to_remember(data + L3_start, data + data_start + 11);
             NC_data_remembered.insert(std::pair<int,std::vector<uint8_t> >(seq_num_sent, to_remember));
