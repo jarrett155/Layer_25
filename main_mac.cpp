@@ -41,6 +41,13 @@ void log_write(const char *format, ...)
     fclose(fp);
 }
 
+struct NC_Client_Data {
+    std::queue<RX_datagram> * received_data;
+    std::map<int,std::vector<uint8_t> > *NC_data_remembered;
+    int seq_to_ack;
+    bool needs_to_NC_ACK;
+};
+
 struct IP_NC_Frame
 {
     int ip_src, ip_dst;
@@ -1479,6 +1486,65 @@ void mac_NC_receiver(RX_datagram * mac_data)
     return;
 }
 
+void* client_Rx_thread(void *client_data_arg)
+{
+    NC_Client_Data * client_data = client_data_arg;
+    std::queue<RX_datagram> * received_data = client_data->received_data;
+    std::map<int,std::vector<uint8_t> > * NC_data_remembered = client_data->NC_data_remembered;
+    while(1)
+    {
+        if (!received_data->empty())
+        {
+            RX_datagram NC_frame = received_data->front();
+            received_data->pop();
+            if(NC_frame.data[6] == 0xAA && NC_frame.data[7] == 0xAA)
+            {
+                int seq_num1 = 256*NC_frame.data[8] + NC_frame.data[9];
+                int seq_num2 = 256*NC_frame.data[10] + NC_frame.data[11];
+                int ip1 = 256*256*256*NC_frame.data[12] + 256*256*NC_frame.data[13] + 256*NC_frame.data[14] + NC_frame.data[15];
+                int ip2 = 256*256*256*NC_frame.data[16] + 256*256*NC_frame.data[17] + 256*NC_frame.data[18] + NC_frame.data[19];
+                if( ip1 == myip)
+                {
+                    if (NC_data_remembered->count(seq_num1))
+                    {
+                        client_data->seq_to_ack = seq_num1;
+                        client_data->needs_to_NC_ACK = true;
+                        std::vector<uint8_t> remembered_data = (*NC_data_remembered)[seq_num1];
+                        NC_data_remembered->erase(seq_num1);
+                        std::vector<uint8_t> decoded_data;
+                        for (int i = 0; i <= 19; i++)
+                        {
+                            decoded_data.push_back(remembered_data[i]^NC_frame.data[20+i]);
+                        }
+                        std::copy(decoded_data.begin(), decoded_data.end(), std::ostream_iterator<uint8_t>(std::cout, ""));
+                    }
+                    
+
+                }
+                else if(ip2 == myip)
+                {
+                    if (NC_data_remembered->count(seq_num2))
+                    {
+                        client_data->seq_to_ack = seq_num2;
+                        client_data->needs_to_NC_ACK = true;
+                        std::vector<uint8_t> remembered_data = (*NC_data_remembered)[seq_num2];
+                        NC_data_remembered->erase(seq_num2);
+                        std::vector<uint8_t> decoded_data;
+                        for (int i = 0; i <= 19; i++)
+                        {
+                            decoded_data.push_back(remembered_data[i]^NC_frame.data[20+i]);
+                        }
+                        std::copy(decoded_data.begin(), decoded_data.end(), std::ostream_iterator<char>(std::cout, ""));
+                    }
+                }
+            }
+            else
+            {
+                printf("      receive data %s\n", NC_frame.data); 
+            }
+        }
+    }
+}
 
 
 void Test_NC_AA()
@@ -1488,17 +1554,19 @@ void Test_NC_AA()
     uint8_t toAddr[6];
     uint8_t apAddr[6];
     uint8_t data[DATA_SIZE];
+    NC_Client_Data client_data;
     int LLC_Header_Size = 8;
     int NC_L25_Header_Size = 2;
     int L3_Header_Size = 8;
-    int seq_to_ack = 0;
-    bool needs_to_NC_ACK = false;
+    client_data.seq_to_ack = 0;
+    client_data.needs_to_NC_ACK = false;
     // const int max_frames_rememebered = 1000;
     int data_start;
     int L3_start;
     int myip = 1;
     std::map<int,std::vector<uint8_t> > NC_data_remembered;
-    std::map<int,std::vector<uint8_t> >::iterator it;
+    //std::map<int,std::vector<uint8_t> >::iterator it;
+    client_data.NC_data_remembered = &NC_data_remembered;
     
     memset(myAddr, 0, 6);
     memset(toAddr, 0, 6);
@@ -1530,6 +1598,7 @@ void Test_NC_AA()
     void mac_NC_receiver(RX_datagram * mac_data);
     handler.mac_setRxCallback(mac_NC_receiver);
     handler.set_frame_queue(&received_data);
+    client_data.received_data = &received_data;
     handler.set_myadx(myAddr);
     handler.set_PHY_TX_MCS(TEST_MCS_INDEX);
     handler.set_AP(false);
@@ -1537,11 +1606,13 @@ void Test_NC_AA()
 
     int total_frame = 0, success_frame = 0;
     std::cout << std::endl << "            [Host] is transmitting." << std::endl;
-    
+    pthread_t Rx_thread;
+
+    pthread_create(&Rx_thread, NULL, client_Rx_thread, (void*) &client_data);
 
     //  Do experiment here by sending frames
     while(1){
-
+    /*
         if (!received_data.empty())
         {
             RX_datagram NC_frame = received_data.front();
@@ -1594,6 +1665,7 @@ void Test_NC_AA()
                 printf("      receive data %s\n", NC_frame.data); 
             }
         }
+        */
         //data[0] = total_frame%256;
         uint32_t delay = (rand()%30)*FRAME_IDLE_UNIT;
         usleep(delay);        
@@ -1720,9 +1792,12 @@ void Test_NC_BB()
     uint8_t toAddr[6];
     uint8_t apAddr[6];
     uint8_t data[DATA_SIZE];
+    NC_Client_Data client_data;
     int LLC_Header_Size = 8;
     int NC_L25_Header_Size = 2;
     int L3_Header_Size = 8;
+    client_data.seq_to_ack = 0;
+    client_data.needs_to_NC_ACK = false;
     // const int max_frames_rememebered = 1000;
     int data_start;
     int L3_start;
@@ -1730,7 +1805,8 @@ void Test_NC_BB()
     int seq_to_ack = 0;
     bool needs_to_NC_ACK = false;
     std::map<int,std::vector<uint8_t> > NC_data_remembered;
-    std::map<int,std::vector<uint8_t> >::iterator it;
+    //std::map<int,std::vector<uint8_t> >::iterator it;
+    client_data.NC_data_remembered = &NC_data_remembered;
     
     memset(myAddr, 0, 6);
     memset(toAddr, 0, 6);
@@ -1769,11 +1845,13 @@ void Test_NC_BB()
 
     int total_frame = 0, success_frame = 0;
     std::cout << std::endl << "            [Host] is transmitting." << std::endl;
-    
+    pthread_t Rx_thread;
+
+    pthread_create(&Rx_thread, NULL, client_Rx_thread, (void*) &client_data);
 
     //  Do experiment here by sending frames
     while(1){
-
+        /*
         if (!received_data.empty())
         {
             RX_datagram NC_frame = received_data.front();
@@ -1827,6 +1905,7 @@ void Test_NC_BB()
                 
             }
         }
+        */
         //data[0] = total_frame%256;
         uint32_t delay = (rand()%30)*FRAME_IDLE_UNIT;
         usleep(delay);        
