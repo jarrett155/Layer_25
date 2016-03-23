@@ -41,6 +41,13 @@ void log_write(const char *format, ...)
     fclose(fp);
 }
 
+    
+struct NC_AP_data
+{
+    std::queue<RX_datagram> * received_data;
+    AP_Handler *ap_handle;
+};
+
 struct NC_Client_Data {
     std::queue<RX_datagram> * received_data;
     std::map<int,std::vector<uint8_t> > *NC_data_remembered;
@@ -2029,6 +2036,41 @@ void Test_NC_BB()
     
 }
 
+void* AP_Rx_thread(void* AP_data_arg)
+{
+    while(1)
+    {
+        if (!received_data.empty())
+        {
+            RX_datagram NC_frame = received_data.front();
+            received_data.pop();
+            if(NC_frame.data[6] == 0xAA && NC_frame.data[7] == 0xAA)
+            {
+                std::cout << "receivd NC ack";
+                //int seq_num_ack = 256*NC_frame.data[8] + NC_frame.data[9];
+                int ip_src = 256*256*256*NC_frame.data[10] + 256*256*NC_frame.data[11] + 256*NC_frame.data[12] + NC_frame.data[13];
+                int ip_dst = 256*256*256*NC_frame.data[14] + 256*256*NC_frame.data[15] + 256*NC_frame.data[16] + NC_frame.data[17];
+                //ap_handle.ack_Frame(ip_src, seq_num_ack);
+
+                std::vector<uint8_t> data_vector(NC_frame.data + 18, NC_frame.data + 18 + 11);
+                ap_handle.received_Frame(NC_frame.seq_num, ip_dst, ip_src, data_vector);
+
+
+            }
+            else
+            {
+                int ip_src = 256*256*256*NC_frame.data[8] + 256*256*NC_frame.data[9] + 256*NC_frame.data[10] + NC_frame.data[11];
+                int ip_dst = 256*256*256*NC_frame.data[12] + 256*256*NC_frame.data[13] + 256*NC_frame.data[14] + NC_frame.data[15];
+                std::vector<uint8_t> data_vector(NC_frame.data + 16, NC_frame.data + 16 + 11);
+                ap_handle.received_Frame(NC_frame.seq_num, ip_dst, ip_src, data_vector);
+
+                //printf("      receive data %s\n", NC_frame.data); 
+            }
+        }
+    }
+    return NULL;
+}
+
 void Test_NC_AP_00(bool use_NC)
 {    
     int status;
@@ -2036,7 +2078,7 @@ void Test_NC_AP_00(bool use_NC)
     uint8_t toAddr[6];
     uint8_t apAddr[6];
     uint8_t data[DATA_SIZE];
-    int count = 0;
+    //int count = 0;
     int frames_uncoded = 0;
     int frames_coded = 0;
     
@@ -2109,13 +2151,21 @@ void Test_NC_AP_00(bool use_NC)
     handler.start_mac();
     IP_NC_Frame sending_frame;
 
+    NC_AP_data AP_data;
+    AP_data.received_data = &received_data;
+    AP_data.ap_handle = &ap_handle;
+
     int total_frame = 0, success_frame = 0;
     std::cout << std::endl << "            [Host] is transmitting." << std::endl;
-    
+
+    pthread_t Rx_thread;
+
+    pthread_create(&Rx_thread, NULL, AP_Rx_thread, (void*) &AP_data);
 
     //  Do experiment here by sending frames
     while(1){
-        count = count + 1;
+    //    count = count + 1;
+    /*
         if (!received_data.empty())
         {
             RX_datagram NC_frame = received_data.front();
@@ -2143,15 +2193,13 @@ void Test_NC_AP_00(bool use_NC)
                 //printf("      receive data %s\n", NC_frame.data); 
             }
         }
-
-
-
+    */
         //data[0] = total_frame%256;
         uint32_t delay = (rand()%30)*FRAME_IDLE_UNIT;
         usleep(delay);        
   //    std::cout << std::endl << "            [Host] START new frame" << std::endl;
         //std::cout<<"checking for next frame\n";
-        if(ap_handle.AP_Has_Next() > 0 && (count % 2) == 0)
+        if(ap_handle.AP_Has_Next())
         {
             //std::cout << "getting next frame\n";
             sending_frame = ap_handle.get_Next();
