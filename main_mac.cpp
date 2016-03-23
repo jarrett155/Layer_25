@@ -42,11 +42,7 @@ void log_write(const char *format, ...)
 }
 
     
-struct NC_AP_data
-{
-    std::queue<RX_datagram> * received_data;
-    AP_Handler *ap_handle;
-};
+
 
 struct NC_Client_Data {
     std::queue<RX_datagram> * received_data;
@@ -111,6 +107,12 @@ public:
 
     void ack_Frame(int src_ip, int seq_num);
 
+};
+
+struct NC_AP_Data
+{
+    std::queue<RX_datagram> * received_data;
+    AP_Handler *ap_handle;
 };
 
 void Test_DCF_A();
@@ -2038,22 +2040,26 @@ void Test_NC_BB()
 
 void* AP_Rx_thread(void* AP_data_arg)
 {
+    NC_AP_Data *ap_data = (NC_AP_Data*)AP_data_arg;
+    std::queue<RX_datagram> * received_data = ap_data->received_data;
+    AP_Handler * ap_handle = ap_data->ap_handle;
     while(1)
     {
-        if (!received_data.empty())
+        if (!received_data->empty())
         {
-            RX_datagram NC_frame = received_data.front();
-            received_data.pop();
+            RX_datagram NC_frame = received_data->front();
+            received_data->pop();
             if(NC_frame.data[6] == 0xAA && NC_frame.data[7] == 0xAA)
             {
-                std::cout << "receivd NC ack";
-                //int seq_num_ack = 256*NC_frame.data[8] + NC_frame.data[9];
+                std::cout << "\n\nreceivd NC ack";
+                int seq_num_ack = 256*NC_frame.data[8] + NC_frame.data[9];
                 int ip_src = 256*256*256*NC_frame.data[10] + 256*256*NC_frame.data[11] + 256*NC_frame.data[12] + NC_frame.data[13];
                 int ip_dst = 256*256*256*NC_frame.data[14] + 256*256*NC_frame.data[15] + 256*NC_frame.data[16] + NC_frame.data[17];
-                //ap_handle.ack_Frame(ip_src, seq_num_ack);
+                ap_handle->ack_Frame(ip_src, seq_num_ack);
+                std::cout << "from ip: " << ip_src << "\n\n\n";
 
                 std::vector<uint8_t> data_vector(NC_frame.data + 18, NC_frame.data + 18 + 11);
-                ap_handle.received_Frame(NC_frame.seq_num, ip_dst, ip_src, data_vector);
+                ap_handle->received_Frame(NC_frame.seq_num, ip_dst, ip_src, data_vector);
 
 
             }
@@ -2062,9 +2068,9 @@ void* AP_Rx_thread(void* AP_data_arg)
                 int ip_src = 256*256*256*NC_frame.data[8] + 256*256*NC_frame.data[9] + 256*NC_frame.data[10] + NC_frame.data[11];
                 int ip_dst = 256*256*256*NC_frame.data[12] + 256*256*NC_frame.data[13] + 256*NC_frame.data[14] + NC_frame.data[15];
                 std::vector<uint8_t> data_vector(NC_frame.data + 16, NC_frame.data + 16 + 11);
-                ap_handle.received_Frame(NC_frame.seq_num, ip_dst, ip_src, data_vector);
+                ap_handle->received_Frame(NC_frame.seq_num, ip_dst, ip_src, data_vector);
 
-                //printf("      receive data %s\n", NC_frame.data); 
+                printf("      receive data %s\n", NC_frame.data); 
             }
         }
     }
@@ -2151,7 +2157,7 @@ void Test_NC_AP_00(bool use_NC)
     handler.start_mac();
     IP_NC_Frame sending_frame;
 
-    NC_AP_data AP_data;
+    NC_AP_Data AP_data;
     AP_data.received_data = &received_data;
     AP_data.ap_handle = &ap_handle;
 
@@ -2263,8 +2269,8 @@ void Test_NC_AP_00(bool use_NC)
                 toAddr[3] = 0xFF;
                 toAddr[4] = 0xFF;
                 toAddr[5] = 0xFF;
-                //ap_handle.set_NC_Ack(sending_frame.seq_num_from, sending_frame.ip_dst);
-                //ap_handle.set_NC_Ack(frame_to_code.seq_num_from, frame_to_code.ip_dst);
+                ap_handle.set_NC_Ack(sending_frame.seq_num_from, sending_frame.ip_dst);
+                ap_handle.set_NC_Ack(frame_to_code.seq_num_from, frame_to_code.ip_dst);
                 frames_coded++;
                 std::cout << "coded frames so far: " << frames_coded << "out of total" << frames_coded + frames_uncoded;
 
@@ -2331,7 +2337,7 @@ void Test_NC_AP_00(bool use_NC)
             switch(status){
             case 0:
                 success_frame++;
-                std::cout << std::endl << "        [Host] Success! " << success_frame << "/" << total_frame << std::endl;
+                //std::cout << std::endl << "        [Host] Success! " << success_frame << "/" << total_frame << std::endl;
                 ap_handle.pop_Next_Frame();
                 break;
             case -1:  
