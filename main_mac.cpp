@@ -229,6 +229,7 @@ void* ack_Timeout(void *must_retransmit)
     
     usleep(1000*ACK_TIMEOUT_MS);
     *((bool*)must_retransmit) = true;
+    std::cout << "\n\n\n      timout triggered \n \n \n"
     return NULL;
 }
 
@@ -374,6 +375,7 @@ void AP_Handler::set_NC_Ack(int seq_num, int ip_to)
     destinations[index_of_dst].seq_need_ack = seq_num;
     destinations[index_of_dst].must_retransmit = false;
     void *timer_arg = &(destinations[index_of_dst].must_retransmit);
+    std::cout << "\nwaiting on ack or timeout from ip : " << ip_to << "with seq num : " << seq_num << "\n";
     pthread_create(&destinations[index_of_dst].timeout_id, NULL, ack_Timeout, timer_arg);
 
 }
@@ -407,6 +409,7 @@ void AP_Handler::pop_Next_Frame()
 // Call this when an NC ack is received. 
 void AP_Handler::ack_Frame(int src_ip, int seq_num)
 {
+    std::cout << "\nacking frame from ip : " << src_ip << "with seq num : " << seq_num << "\n";
     int index_of_dst = IP_to_index_map[src_ip];
     if (seq_num == destinations[index_of_dst].seq_need_ack)
     {
@@ -2231,8 +2234,8 @@ void Test_NC_AP_00(bool use_NC)
                 
                 int seq_num1 = sending_frame.seq_num_from;
                 int seq_num2 = frame_to_code.seq_num_from;
-                int ip_addr1 = sending_frame.ip_dst;
-                int ip_addr2 = frame_to_code.ip_dst;
+                int ip_addr1 = sending_frame.ip_src;
+                int ip_addr2 = frame_to_code.ip_src;
 
                 // NC Header for data
                 data[8] = seq_num1/256;
