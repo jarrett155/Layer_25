@@ -59,6 +59,10 @@ struct IP_NC_Frame
     std::vector<uint8_t> data;
 };
 
+struct Timeout_Args {
+    bool * must_retransmit;
+    bool * needs_to_ack;
+};
 
 struct NC_Dest
 {
@@ -224,13 +228,38 @@ int main(int argc, char *argv[]){
 
 //AP HANDLER CODE. SHOULD ADD TO OWN FILE BUT CMAKE
 
-void* ack_Timeout(void *must_retransmit)
+void* ack_Timeout(void * timer_arg)
 {
-    
+    std::cout << " input : " << timer_arg;
+    Timeout_Args timer_vals =  *(Timeout_Args *)timer_arg;
+    std::cout << " input : " << &timer_vals;
     usleep(1000*ACK_TIMEOUT_MS);
-    *((bool*)must_retransmit) = true;
-    std::cout << "\n\n\n      timout triggered \n \n \n"
+    std::cout << "\n\n\n      timout triggered \n\n\n" << timer_vals.must_retransmit;
+    *timer_vals.must_retransmit = true;
+    std::cout << "\n\n\n      timout triggered \n\n\n";
+    *timer_vals.needs_to_ack = false;
+    std::cout << "\n\n\n      timout triggered \n\n\n";
     return NULL;
+}
+
+// Set the ack for frames used in NC. Must be called once for each of the
+// destinations in an NC frame.
+void AP_Handler::set_NC_Ack(int seq_num, int ip_to)
+{
+    int index_of_dst = IP_to_index_map[ip_to];
+    destinations[index_of_dst].waiting_for_ack = true;
+    destinations[index_of_dst].data_needs_ack = destinations[index_of_dst].to_send.front();
+    destinations[index_of_dst].seq_need_ack = seq_num;
+    destinations[index_of_dst].must_retransmit = false;
+    //void *timer_arg = &(destinations[index_of_dst].must_retransmit);
+    std::cout << "\nwaiting on ack or timeout from ip : " << ip_to << "with seq num : " << seq_num << "\n";
+    Timeout_Args timer_arg;
+    timer_arg.must_retransmit = &(destinations[index_of_dst].must_retransmit);
+    timer_arg.needs_to_ack = &(destinations[index_of_dst].waiting_for_ack);
+    std::cout << timer_arg.must_retransmit << "    " << &timer_arg;
+    
+    pthread_create(&destinations[index_of_dst].timeout_id, NULL, ack_Timeout, (void *) &timer_arg);
+
 }
 
 AP_Handler::AP_Handler()
@@ -363,21 +392,6 @@ IP_NC_Frame AP_Handler::get_Next()
         IP_NC_Frame hi;
         return hi;
     }
-}
-
-// Set the ack for frames used in NC. Must be called once for each of the
-// destinations in an NC frame.
-void AP_Handler::set_NC_Ack(int seq_num, int ip_to)
-{
-    int index_of_dst = IP_to_index_map[ip_to];
-    destinations[index_of_dst].waiting_for_ack = true;
-    destinations[index_of_dst].data_needs_ack = destinations[index_of_dst].to_send.front();
-    destinations[index_of_dst].seq_need_ack = seq_num;
-    destinations[index_of_dst].must_retransmit = false;
-    void *timer_arg = &(destinations[index_of_dst].must_retransmit);
-    std::cout << "\nwaiting on ack or timeout from ip : " << ip_to << "with seq num : " << seq_num << "\n";
-    pthread_create(&destinations[index_of_dst].timeout_id, NULL, ack_Timeout, timer_arg);
-
 }
 
 // Used to clear out a sent frame once it is done sending.
@@ -1501,7 +1515,7 @@ void mac_NC_receiver(RX_datagram * mac_data)
 
 void* client_Rx_thread(void *client_data_arg)
 {
-    NC_Client_Data *client_data = (NC_Client_Data*)client_data_arg;
+    NC_Client_Data * client_data = (NC_Client_Data*)client_data_arg;
     std::queue<RX_datagram> * received_data = client_data->received_data;
     std::map<int,std::vector<uint8_t> > * NC_data_remembered = client_data->NC_data_remembered;
     while(1)
@@ -2272,8 +2286,8 @@ void Test_NC_AP_00(bool use_NC)
                 toAddr[3] = 0xFF;
                 toAddr[4] = 0xFF;
                 toAddr[5] = 0xFF;
-                ap_handle.set_NC_Ack(sending_frame.seq_num_from, sending_frame.ip_dst);
-                ap_handle.set_NC_Ack(frame_to_code.seq_num_from, frame_to_code.ip_dst);
+                ap_handle.set_NC_Ack(frame_to_code.seq_num_from, sending_frame.ip_dst);
+                ap_handle.set_NC_Ack(sending_frame.seq_num_from, frame_to_code.ip_dst);
                 frames_coded++;
                 std::cout << "coded frames so far: " << frames_coded << "out of total" << frames_coded + frames_uncoded;
 
