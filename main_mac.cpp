@@ -1938,8 +1938,9 @@ void Test_NC_BB()
         uint32_t delay = (rand()%30)*FRAME_IDLE_UNIT;
         usleep(delay);        
   //    std::cout << std::endl << "            [Host] START new frame" << std::endl;
-        if(needs_to_NC_ACK)
+        if(client_data.needs_to_NC_ACK)
         {
+            std::cout << "\n sending NC ack\n";
             //set NC header and LLC header
             data_start = LLC_Header_Size + NC_L25_Header_Size + L3_Header_Size;
             L3_start = data_start - L3_Header_Size;
@@ -1955,8 +1956,8 @@ void Test_NC_BB()
             data[7] = 0XAA;
 
             // NC Header for ACK
-            data[8] = seq_to_ack/256;
-            data[9] = seq_to_ack;
+            data[8] = client_data.seq_to_ack/256;
+            data[9] = client_data.seq_to_ack;
 
             // source ip addr
             data[L3_start + 0] = 0;
