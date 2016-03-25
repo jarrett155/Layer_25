@@ -1737,9 +1737,11 @@ void Test_NC_AA()
             data[data_start + 4] = ' ';
             data[data_start + 5] = 'A';
             data[data_start + 6] = 'A';
-            data[data_start + 7] = 'A';
+            data[data_start + 7] = ' ';
             data[data_start + 10] = '\0';
             client_data.needs_to_NC_ACK = false;  
+            data[data_start + 8] = success_frame / 256;
+            data[data_start + 9] = success_frame;   
         }
         else
         {
@@ -1778,7 +1780,7 @@ void Test_NC_AA()
             data[data_start + 4] = ' ';
             data[data_start + 5] = 'A';
             data[data_start + 6] = 'A';
-            data[data_start + 6] = ' ';
+            data[data_start + 7] = ' ';
             data[data_start + 10] = '\0';  
 
         }
@@ -1980,7 +1982,9 @@ void Test_NC_BB()
             data[data_start + 6] = 'B';
             data[data_start + 7] = ' ';
             data[data_start + 10] = '\0';
-            needs_to_NC_ACK = false;  
+            client_data.needs_to_NC_ACK = false;  
+            data[data_start + 8] = success_frame / 256;
+            data[data_start + 9] = success_frame;  
         }
         else
         {
@@ -2017,9 +2021,9 @@ void Test_NC_BB()
             data[data_start + 2] = 'o';
             data[data_start + 3] = 'm';
             data[data_start + 4] = ' ';
-            data[data_start + 5] = 'A';
-            data[data_start + 6] = 'A';
-            data[data_start + 6] = ' ';
+            data[data_start + 5] = 'B';
+            data[data_start + 6] = 'B';
+            data[data_start + 7] = ' ';
             data[data_start + 10] = '\0';  
 
         }
