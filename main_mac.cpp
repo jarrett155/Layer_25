@@ -74,6 +74,7 @@ struct NC_Dest
     bool must_retransmit;
     pthread_t timeout_id;
     int ip_dst;
+    Timeout_Args timeout_args;
     // to add ack nums that can do NC
 };
 
@@ -251,12 +252,7 @@ void AP_Handler::set_NC_Ack(int seq_num, int ip_to)
     destinations[index_of_dst].data_needs_ack = destinations[index_of_dst].to_send.front();
     destinations[index_of_dst].seq_need_ack = seq_num;
     destinations[index_of_dst].must_retransmit = false;
-    //void *timer_arg = &(destinations[index_of_dst].must_retransmit);
-    std::cout << "\nwaiting on ack or timeout from ip : " << ip_to << "with seq num : " << seq_num << "\n";
-    Timeout_Args timer_arg;
-    timer_arg.must_retransmit = &(destinations[index_of_dst].must_retransmit);
-    timer_arg.needs_to_ack = &(destinations[index_of_dst].waiting_for_ack);
-    std::cout << timer_arg.must_retransmit << "    " << &timer_arg;
+    void * timer_arg = &(destinations[index_of_dst].timeout_args);
     
     pthread_create(&destinations[index_of_dst].timeout_id, NULL, ack_Timeout, (void *) &timer_arg);
 
@@ -311,6 +307,8 @@ void AP_Handler::received_Frame(int seq_num, int ip_dst, int ip_src, std::vector
         frame_received.ip_dst = ip_dst;
         frame_received.data = data;
         frame_received.seq_num_from = seq_num;
+        new_dest.timeout_args.must_retransmit = &new_dest.must_retransmit;
+        new_dest.timeout_args.needs_to_ack = &new_dest.waiting_for_ack;
         new_dest.to_send.push(frame_received);
         destinations.push_back(new_dest);
         current_size ++;
