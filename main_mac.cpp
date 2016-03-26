@@ -232,14 +232,14 @@ int main(int argc, char *argv[]){
 void* ack_Timeout(void * timer_arg)
 {
     std::cout << " input : " << timer_arg;
-    Timeout_Args timer_vals =  *(Timeout_Args *)timer_arg;
+    Timeout_Args * timer_vals =  *(Timeout_Args *)timer_arg;
     std::cout << " input : " << &timer_vals;
     usleep(1000*ACK_TIMEOUT_MS);
-    std::cout << "\n\n\n      timout triggered \n\n\n" << timer_vals.must_retransmit;
-    *timer_vals.must_retransmit = true;
     std::cout << "\n\n\n      timout triggered \n\n\n";
-    *timer_vals.needs_to_ack = false;
-    std::cout << "\n\n\n      timout triggered \n\n\n";
+    *(timer_vals->must_retransmit) = true;
+    //std::cout << "\n\n\n      timout triggered \n\n\n";
+    *(timer_vals->needs_to_ack) = false;
+    //std::cout << "\n\n\n      timout triggered \n\n\n";
     return NULL;
 }
 
@@ -254,7 +254,7 @@ void AP_Handler::set_NC_Ack(int seq_num, int ip_to)
     destinations[index_of_dst].must_retransmit = false;
     void * timer_arg = &(destinations[index_of_dst].timeout_args);
     
-    pthread_create(&destinations[index_of_dst].timeout_id, NULL, ack_Timeout, (void *) &timer_arg);
+    pthread_create(&destinations[index_of_dst].timeout_id, NULL, ack_Timeout, &timer_arg);
 
 }
 
@@ -1833,7 +1833,6 @@ void Test_NC_BB()
     int L3_start;
     client_data.myip = 2;
     int seq_to_ack = 0;
-    bool needs_to_NC_ACK = false;
     std::map<int,std::vector<uint8_t> > NC_data_remembered;
     //std::map<int,std::vector<uint8_t> >::iterator it;
     client_data.NC_data_remembered = &NC_data_remembered;
