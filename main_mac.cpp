@@ -231,9 +231,9 @@ int main(int argc, char *argv[]){
 
 void* ack_Timeout(void * timer_arg)
 {
-    std::cout << " input : " << timer_arg;
-    Timeout_Args * timer_vals =  *(Timeout_Args *)timer_arg;
-    std::cout << " input : " << &timer_vals;
+    //std::cout << " input : " << timer_arg;
+    Timeout_Args * timer_vals =  (Timeout_Args *)timer_arg;
+    //std::cout << " input : " << &timer_vals;
     usleep(1000*ACK_TIMEOUT_MS);
     std::cout << "\n\n\n      timout triggered \n\n\n";
     *(timer_vals->must_retransmit) = true;
@@ -252,9 +252,11 @@ void AP_Handler::set_NC_Ack(int seq_num, int ip_to)
     destinations[index_of_dst].data_needs_ack = destinations[index_of_dst].to_send.front();
     destinations[index_of_dst].seq_need_ack = seq_num;
     destinations[index_of_dst].must_retransmit = false;
+    destinations[index_of_dst].timeout_args.must_retransmit = &(destinations[index_of_dst].must_retransmit);
+    destinations[index_of_dst].timeout_args.needs_to_ack = &(destinations[index_of_dst].waiting_for_ack);
     void * timer_arg = &(destinations[index_of_dst].timeout_args);
     
-    pthread_create(&destinations[index_of_dst].timeout_id, NULL, ack_Timeout, &timer_arg);
+    pthread_create(&destinations[index_of_dst].timeout_id, NULL, ack_Timeout, timer_arg);
 
 }
 
@@ -307,10 +309,11 @@ void AP_Handler::received_Frame(int seq_num, int ip_dst, int ip_src, std::vector
         frame_received.ip_dst = ip_dst;
         frame_received.data = data;
         frame_received.seq_num_from = seq_num;
-        new_dest.timeout_args.must_retransmit = &new_dest.must_retransmit;
-        new_dest.timeout_args.needs_to_ack = &new_dest.waiting_for_ack;
+
         new_dest.to_send.push(frame_received);
         destinations.push_back(new_dest);
+        destinations[current_size].timeout_args.must_retransmit = &(destinations[current_size].must_retransmit);
+        destinations[current_size].timeout_args.needs_to_ack = &(destinations[current_size].waiting_for_ack);
         current_size ++;
         frames_to_send ++;
     }
@@ -322,7 +325,7 @@ bool AP_Handler::has_Matching_Frame(IP_NC_Frame frame_to_match)
     //std::cout << "checking for nc\n";
     if (destinations[current_destination].waiting_for_ack)
     {
-        //std::cout << "no NC, waiting for ack\n";
+        std::cout << "no NC, waiting for ack\n";
         return false;
     }
     else
@@ -369,6 +372,7 @@ IP_NC_Frame AP_Handler::get_Next()
         if(destinations[current_destination].must_retransmit)
         {
             retransmit = true;
+            std::cout << "\n retransmitting failed NC info\n";
             return destinations[current_destination].data_needs_ack;
         }
     } while(destinations[current_destination].size < 1 && current_destination != start);
@@ -1832,7 +1836,6 @@ void Test_NC_BB()
     int data_start;
     int L3_start;
     client_data.myip = 2;
-    int seq_to_ack = 0;
     std::map<int,std::vector<uint8_t> > NC_data_remembered;
     //std::map<int,std::vector<uint8_t> >::iterator it;
     client_data.NC_data_remembered = &NC_data_remembered;
@@ -1866,6 +1869,7 @@ void Test_NC_BB()
     std::queue<RX_datagram> received_data;
     void mac_NC_receiver(RX_datagram * mac_data);
     handler.set_frame_queue(&received_data);
+    client_data.received_data = &received_data;
     handler.mac_setRxCallback(mac_NC_receiver);
     handler.set_myadx(myAddr);
     handler.set_PHY_TX_MCS(TEST_MCS_INDEX);
@@ -2089,7 +2093,7 @@ void* AP_Rx_thread(void* AP_data_arg)
                 std::vector<uint8_t> data_vector(NC_frame.data + 16, NC_frame.data + 16 + 11);
                 ap_handle->received_Frame(NC_frame.seq_num, ip_dst, ip_src, data_vector);
 
-                printf("      receive data %s\n", NC_frame.data); 
+                //printf("      receive data %s\n", NC_frame.data); 
             }
         }
     }
