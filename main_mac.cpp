@@ -1733,7 +1733,7 @@ void* client_Rx_thread(void *client_data_arg)
                         {
                             decoded_data.push_back(remembered_data[i]^NC_frame.data[20+i]);
                         }
-                        //std::copy(decoded_data.begin(), decoded_data.end(), std::ostream_iterator<uint8_t>(std::cout, ""));
+                        printf("      receive data %s\n", decoded_data.data());
                     }
                     
 
@@ -1751,7 +1751,7 @@ void* client_Rx_thread(void *client_data_arg)
                         {
                             decoded_data.push_back(remembered_data[i]^NC_frame.data[20+i]);
                         }
-                        //std::copy(decoded_data.begin(), decoded_data.end(), std::ostream_iterator<char>(std::cout, ""));
+                        printf("      receive data %s\n", decoded_data.data());
                     }
                 }
             }
