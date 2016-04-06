@@ -44,11 +44,14 @@
 #define MICRO_PER_SEC 1000000
 #define NANO_PER_MICRO 1000
 
+
+
+
 //time parameter to configure NAV
-#define ACK_PHY_TIME 1100               //obtained from matlab, either RTT_estimation or Detection_estimation
-#define CTS_PHY_TIME 1100               //same as ACK_PHY_TIME
+#define ACK_PHY_TIME 360              //obtained from matlab, either RTT_estimation or Detection_estimation
+#define CTS_PHY_TIME 360               //same as ACK_PHY_TIME
 #define MAC_RX_PROC_TIME 10             //can be measured by enabling DCF_MEASURE_MAC_PROC_ENABLED inside dcf_log.h, it is very small
-#define ACK_DETECT_TO_RECEIVE_TIME 652  //obtained from matlab Detection_estimation
+#define ACK_DETECT_TO_RECEIVE_TIME 230  //obtained from matlab Detection_estimation
 
 #define SLEEP_STEP_US 50
 

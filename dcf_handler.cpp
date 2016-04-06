@@ -36,8 +36,8 @@ Dcf_handler::Dcf_handler()
     dcf_settings.rts_limit = 2030;        //if length of entire frame higher than or equal to this value, rts is sent
                                                              //for datagram size of 2000, frag_limit = 2028 doesn't fragment but use RTS,
                                                              //size of 2029 doesn't use fragment or RTS, size of 2027 use fragment and RTS
-    dcf_settings.aSlotTime =580;  //obtained from Matlab, 580 can be less to trade off high probability of timing mismatch (collision), but it can reduce idle time
-    dcf_settings.aSIFSTime = 200;  //not used, assume the MAC process while running code is SIFS
+    dcf_settings.aSlotTime =200;  //obtained from Matlab, 580 can be less to trade off high probability of timing mismatch (collision), but it can reduce idle time
+    dcf_settings.aSIFSTime = 50;  //not used, assume the MAC process while running code is SIFS
     dcf_settings.aDIFSTime = ( 2 * dcf_settings.aSlotTime + MAC_RX_PROC_TIME);
     dcf_settings.MAC_address[0] = 0xAA;
     dcf_settings.BSSID[0] = 0xCC;
@@ -55,7 +55,7 @@ Dcf_handler::Dcf_handler()
     m_txack_packet.mode = BPSK_1By2_1p8Mbps;
 
     sleepstep.tv_sec = 0;
-    sleepstep.tv_nsec = 50 * NANO_PER_MICRO;
+    sleepstep.tv_nsec = SLEEP_STEP_US * NANO_PER_MICRO;
 
     is_rate_adapt = false;
 
@@ -373,15 +373,19 @@ int Dcf_handler::tx_frame(){
         }
         memcpy(m_tx_packet.buffer,(uint8_t*)&(frame_txing.frame),frame_txing.framesize);
 
-        if(0 == memcmp(frame_txing.frame.header.addr1, dcf_settings.broadcast_adx, MAC_ADDR_LENGTH))
+        if( frame_txing.frame.header.addr1[0] == 0XFF && frame_txing.frame.header.addr1[1] == 0XFF 
+            && frame_txing.frame.header.addr1[2] == 0XFF && frame_txing.frame.header.addr1[3] == 0XFF 
+            && frame_txing.frame.header.addr1[4] == 0XFF && frame_txing.frame.header.addr1[5] == 0XFF)
         {
             dcf_status.need_ack = false;
+            dcf_status.have_ack = true;
         }
         else
         {
             dcf_status.need_ack = true;
+            dcf_status.have_ack = false;
         }
-        dcf_status.have_ack = false;
+        
 
         //Check for DIFS, only if it is the first frame in queue, also it has to be the first tx
         //Retry transmission goes through other path to transmit
@@ -908,28 +912,28 @@ uint16_t Dcf_handler::compute_RTS_DATA_duration (uint16_t frame_control, uint32_
         uint16_t duration_DATA = 0; //compute expected data duration
         switch(MCS_index){
             case 0:
-                duration_DATA = 4.46*next_frame_length +854;
+                duration_DATA = 4.47*next_frame_length +267;
                 break;
             case 1:
-                duration_DATA = 3.02*next_frame_length +770;
+                duration_DATA = 2.99*next_frame_length +251;
                 break;
             case 2:
-                duration_DATA = 2.25*next_frame_length +813;
+                duration_DATA = 2.23*next_frame_length +247;
                 break;
             case 3:
-                duration_DATA = 1.52*next_frame_length +793;
+                duration_DATA = 1.49*next_frame_length +245;
                 break;
             case 4:
-                duration_DATA = 1.11*next_frame_length +816;
+                duration_DATA = 1.10*next_frame_length +258;
                 break;
             case 5:
-                duration_DATA = 0.717*next_frame_length + 874;
+                duration_DATA = 0.73*next_frame_length + 256;
                 break;
             case 6:
-                duration_DATA = 0.548 *next_frame_length +904;
+                duration_DATA = 0.54 *next_frame_length +258;
                 break;
             case 7:
-                duration_DATA = 0.461 * next_frame_length +895;
+                duration_DATA = 0.48 * next_frame_length +259;
                 break;
         }
 
@@ -1119,28 +1123,28 @@ void Dcf_handler::DCF_callback_find_phy_header(int mcs, int length, bool crc_val
             uint16_t lock_nav = 0;
             switch (mcs){  // obtained from matlab Detection_estimation.m
                 case 0:
-                    lock_nav = length * 4.389  + 436;
+                    lock_nav = length * 4.44 + 152;
                     break;
                 case 1:
-                    lock_nav = length * 2.91  + 428;
+                    lock_nav = length * 2.96  + 140;
                     break;
                 case 2:
-                    lock_nav = length * 2.16  + 389;
+                    lock_nav = length * 2.21  + 141;
                     break;
                 case 3:
-                    lock_nav = length * 1.43  + 400;
+                    lock_nav = length * 1.47  + 138;
                     break;
                 case 4:
-                    lock_nav = length * 1.04  + 426;
+                    lock_nav = length * 1.08  + 149;
                     break;
                 case 5:
-                    lock_nav = length * 0.65  + 482;
+                    lock_nav = length * 0.71  + 151;
                     break;
                 case 6:
-                    lock_nav = length * 0.43  + 520;
+                    lock_nav = length * 0.53  + 146;
                     break;
                 case 7:
-                    lock_nav = length * 0.36  + 533;
+                    lock_nav = length * 0.47  + 147;
                     break;
                 default:
                     lock_nav = dcf_settings.ack_timeout;
