@@ -136,11 +136,14 @@ void Test_Relay_CC();
 void Test_NC_AA();
 void Test_NC_BB();
 void Test_NC_AP_00(bool use_NC);
+void Test_MAC3_A();
+void Test_MAC3_B();
+void Test_MAC3_C();
 
 int main(int argc, char *argv[]){
     int desiredTest  = -1;
 
-    while(desiredTest<1 || desiredTest>18){
+    while(desiredTest<1 || desiredTest>21){
         std::cout << "Select desired application: \n";
         std::cout << "   1) DCF test MACaddr = 0xAA, send to 0xBB\n";
         std::cout << "   2) DCF test MACaddr = 0xBB, send to 0xAA\n";
@@ -160,6 +163,9 @@ int main(int argc, char *argv[]){
         std::cout << "   16) NC test client AA\n";
         std::cout << "   17) NC test client BB\n";
         std::cout << "   18) NC test AP CC\n";
+        std::cout << "   19) 3 way MAC AA\n";
+        std::cout << "   20) 3 way MAC BB\n";
+        std::cout << "   21) 3 way MAC CC\n";
         
         std::cin >> desiredTest;
     }
@@ -217,6 +223,15 @@ int main(int argc, char *argv[]){
             break;
         case 18:
             Test_NC_AP_00(true);
+            break;
+        case 19:
+            Test_MAC3_A()
+            break;
+        case 20:
+            Test_MAC3_B()
+            break;
+        case 21:
+            Test_MAC3_C()
             break;
         default:
             break;
@@ -990,6 +1005,178 @@ void Test_MAC_B()
         }          
     }
 }
+
+void Test_MAC3_A()
+{
+    int status;
+    uint8_t myAddr[6];
+    uint8_t toAddr[6];
+    uint8_t data[DATA_SIZE];
+    
+    memset(myAddr, 0, 6);
+    memset(toAddr, 0, 6);
+    memset(data,0,sizeof(data));
+    
+    myAddr[0] = 0xAA;
+    myAddr[1] = 0xAA;
+    myAddr[2] = 0xAA;
+    myAddr[3] = 0xAA;
+    myAddr[4] = 0xAA;
+    myAddr[5] = 0xAA;
+    
+    toAddr[0] = 0xBB;
+    toAddr[1] = 0xBB;
+    toAddr[2] = 0xBB;
+    toAddr[3] = 0xBB;
+    toAddr[4] = 0xBB;
+    toAddr[5] = 0xBB;
+       
+    Mac_handler handler;
+    void mac_STA_receiver(RX_datagram * mac_data);
+    handler.mac_setRxCallback(mac_STA_receiver);
+    handler.set_myadx(myAddr);
+    handler.set_PHY_TX_MCS(TEST_MCS_INDEX);
+    
+    handler.start_mac();
+           
+    int total_frame = 0, success_frame = 0;
+    std::cout << std::endl << "            [Host] is transmitting." << std::endl;
+    while(1){
+        data[0] = total_frame%256;
+        uint32_t delay = (rand()%30)*FRAME_IDLE_UNIT;
+        usleep(delay);        
+  //      std::cout << std::endl << "            [Host] START new frame" << std::endl;         
+        status =  handler.send_frame(data,toAddr,sizeof(data));
+        total_frame++;
+        switch(status){
+        case 0:
+            success_frame++;
+ //           std::cout << std::endl << "        [Host] Success! " << success_frame << "/" << total_frame << std::endl;
+            break;
+        case -1:  
+            std::cout << std::endl << "            [Host] Failure. discard." << std::endl;
+            break;
+        case -2:
+  //          std::cout << std::endl << "            [Host] Failure! (busy)" << std::endl;
+            break;   
+        }          
+    }   
+}
+
+void Test_MAC3_B()
+{
+    int status;
+    uint8_t myAddr[6];
+    uint8_t toAddr[6];
+    uint8_t data[DATA_SIZE];
+    
+    memset(myAddr, 0, 6);
+    memset(toAddr, 0, 6);
+    memset(data,0,sizeof(data));
+    
+    myAddr[0] = 0xBB;
+    myAddr[1] = 0xBB;
+    myAddr[2] = 0xBB;
+    myAddr[3] = 0xBB;
+    myAddr[4] = 0xBB;
+    myAddr[5] = 0xBB;
+    
+    toAddr[0] = 0xCC;
+    toAddr[1] = 0xCC;
+    toAddr[2] = 0xCC;
+    toAddr[3] = 0xCC;
+    toAddr[4] = 0xCC;
+    toAddr[5] = 0xCC;
+       
+    Mac_handler handler;
+    void mac_STA_receiver(RX_datagram * mac_data);
+    handler.mac_setRxCallback(mac_STA_receiver);
+    handler.set_myadx(myAddr);
+    handler.set_PHY_TX_MCS(TEST_MCS_INDEX);
+    
+    handler.start_mac();
+           
+    int total_frame = 0, success_frame = 0;
+    std::cout << std::endl << "            [Host] is transmitting." << std::endl;
+    while(1){
+        data[0] = total_frame%256;
+        uint32_t delay = (rand()%30)*FRAME_IDLE_UNIT;
+        usleep(delay);        
+  //      std::cout << std::endl << "            [Host] START new frame" << std::endl;         
+        status =  handler.send_frame(data,toAddr,sizeof(data));
+        total_frame++;
+        switch(status){
+        case 0:
+            success_frame++;
+ //           std::cout << std::endl << "        [Host] Success! " << success_frame << "/" << total_frame << std::endl;
+            break;
+        case -1:  
+            std::cout << std::endl << "            [Host] Failure. discard." << std::endl;
+            break;
+        case -2:
+  //          std::cout << std::endl << "            [Host] Failure! (busy)" << std::endl;
+            break;   
+        }          
+    }   
+}
+
+void Test_MAC3_C()
+{
+    int status;
+    uint8_t myAddr[6];
+    uint8_t toAddr[6];
+    uint8_t data[DATA_SIZE];
+    
+    memset(myAddr, 0, 6);
+    memset(toAddr, 0, 6);
+    memset(data,0,sizeof(data));
+    
+    myAddr[0] = 0xCC;
+    myAddr[1] = 0xCC;
+    myAddr[2] = 0xCC;
+    myAddr[3] = 0xCC;
+    myAddr[4] = 0xCC;
+    myAddr[5] = 0xCC;
+    
+    toAddr[0] = 0xAA;
+    toAddr[1] = 0xAA;
+    toAddr[2] = 0xAA;
+    toAddr[3] = 0xAA;
+    toAddr[4] = 0xAA;
+    toAddr[5] = 0xAA;
+       
+    Mac_handler handler;
+    void mac_STA_receiver(RX_datagram * mac_data);
+    handler.mac_setRxCallback(mac_STA_receiver);
+    handler.set_myadx(myAddr);
+    handler.set_PHY_TX_MCS(TEST_MCS_INDEX);
+    
+    handler.start_mac();
+           
+    int total_frame = 0, success_frame = 0;
+    std::cout << std::endl << "            [Host] is transmitting." << std::endl;
+    while(1){
+        data[0] = total_frame%256;
+        uint32_t delay = (rand()%30)*FRAME_IDLE_UNIT;
+        usleep(delay);        
+  //      std::cout << std::endl << "            [Host] START new frame" << std::endl;         
+        status =  handler.send_frame(data,toAddr,sizeof(data));
+        total_frame++;
+        switch(status){
+        case 0:
+            success_frame++;
+ //           std::cout << std::endl << "        [Host] Success! " << success_frame << "/" << total_frame << std::endl;
+            break;
+        case -1:  
+            std::cout << std::endl << "            [Host] Failure. discard." << std::endl;
+            break;
+        case -2:
+  //          std::cout << std::endl << "            [Host] Failure! (busy)" << std::endl;
+            break;   
+        }          
+    }   
+}
+
 
 extern struct timeval rx_micro_start,rx_micro_end;
 extern unsigned int rx_timer;
@@ -2375,3 +2562,4 @@ void Test_NC_AP_00(bool use_NC)
     }
     
 }
+
