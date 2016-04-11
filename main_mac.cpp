@@ -225,13 +225,13 @@ int main(int argc, char *argv[]){
             Test_NC_AP_00(true);
             break;
         case 19:
-            Test_MAC3_A()
+            Test_MAC3_A();
             break;
         case 20:
-            Test_MAC3_B()
+            Test_MAC3_B();
             break;
         case 21:
-            Test_MAC3_C()
+            Test_MAC3_C();
             break;
         default:
             break;

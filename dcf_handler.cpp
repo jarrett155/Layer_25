@@ -43,8 +43,8 @@ Dcf_handler::Dcf_handler()
     dcf_settings.BSSID[0] = 0xCC;
     dcf_settings.CWmin = 5; // Given by standard, 2^5-1 = 31
     dcf_settings.CWmax = 10; // Given by standard, 2^10-1 = 1023
-    dcf_settings.short_retry_limit = 5; // find good value
-    dcf_settings.long_retry_limit = 5; //find a good value
+    dcf_settings.short_retry_limit = 8; // find good value
+    dcf_settings.long_retry_limit = 8; //find a good value
 
     dcf_settings.is_FPGA_callback_used = false;
     dcf_settings.MCS_index = 0;
@@ -378,14 +378,12 @@ int Dcf_handler::tx_frame(){
             && frame_txing.frame.header.addr1[4] == 0XFF && frame_txing.frame.header.addr1[5] == 0XFF)
         {
             dcf_status.need_ack = false;
-            dcf_status.have_ack = true;
         }
         else
         {
             dcf_status.need_ack = true;
-            dcf_status.have_ack = false;
         }
-        
+        dcf_status.have_ack = false;
 
         //Check for DIFS, only if it is the first frame in queue, also it has to be the first tx
         //Retry transmission goes through other path to transmit

@@ -203,8 +203,8 @@ void * Mac_handler::MAC_TX_thread()
                     {
                         decide_record();                    
                     }
-                    //frame_length = create_data_frame(max_frag_number);  
-                    frame_length = create_to_AP_frame(datagram,data_length, destination_mac_addr, ap_mac_addr);                
+                    frame_length = create_data_frame(max_frag_number);  
+                    //frame_length = create_to_AP_frame(datagram,data_length, destination_mac_addr, ap_mac_addr);                
                     queue_frame(&m_tx_frame, frame_length);
                 }                         
 
@@ -647,9 +647,9 @@ uint16_t Mac_handler::create_to_AP_frame(uint8_t* data,uint16_t length, uint8_t*
                 
     frame_ctrl=((frame_ctrl | mask<<Frame_ctrl(toDs) ) << 4 | SUBTYPE_DATA ) << 4 | DATA_FRAME;
     m_tx_frame.header.frame_ctrl = frame_ctrl;
-    memcpy(m_tx_frame.header.addr1, DA, MAC_ADDR_LENGTH);
+    memcpy(m_tx_frame.header.addr1, AP, MAC_ADDR_LENGTH);
     memcpy(m_tx_frame.header.addr2, mac_settings.my_mac_addr, MAC_ADDR_LENGTH);
-    memcpy(m_tx_frame.header.addr3, AP, MAC_ADDR_LENGTH);
+    memcpy(m_tx_frame.header.addr3, DA, MAC_ADDR_LENGTH);
     seq_ctrl = (uint16_t)((mac_status.seq_number%SEQUENCE_NUM_MOD) << 4 | mac_status.curr_frag_number);
     m_tx_frame.header.seq_ctl = seq_ctrl;
 
