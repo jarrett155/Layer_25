@@ -389,7 +389,8 @@ int Dcf_handler::tx_frame(){
 
         //Check for DIFS, only if it is the first frame in queue, also it has to be the first tx
         //Retry transmission goes through other path to transmit
-        if (dcf_status.is_first_frame_and_first_tx)
+        
+        /*if (dcf_status.is_first_frame_and_first_tx)
         {
             //check if DIFS at first time is preempted,
             dcf_status.is_DIFS_preempted = false;
@@ -405,7 +406,7 @@ int Dcf_handler::tx_frame(){
                 }
             } while(is_abs_difs_greater_abs_curr());
             dcf_log_info((char*)&dcf_logname,"Waited DIFS without channel busy, ready to TX\n");
-        }
+        }*/
 
 #ifdef DCF_TX_CONTENT_LOGGING_ENABLED
         gettimeofday (&tx_micro_start, NULL);  //for collecting time for sending behavior
