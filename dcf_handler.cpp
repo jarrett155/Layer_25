@@ -417,7 +417,7 @@ int Dcf_handler::tx_frame(){
             dcf_log_info((char*)&dcf_logname,"TX send error\n");
             return RETURN_UNCLEAR_IF_TAKING_CHANNEL;
         }
-        set_abs_nav(ACK_PHY_TIME  + MAC_RX_PROC_TIME); 
+        //set_abs_nav(ACK_PHY_TIME); 
 #ifdef DCF_TX_CONTENT_LOGGING_ENABLED
         gettimeofday(&tx_micro_end,NULL);
 #endif

@@ -8,7 +8,7 @@
 // rate adaptation
 #define MAX_RATE_MODE 7
 #define MIN_RATE_MODE 0
-#define FRAME_IDLE_UNIT 0
+#define FRAME_IDLE_UNIT 1100
 
 /** deliver data to Network layer*/
 struct RX_datagram

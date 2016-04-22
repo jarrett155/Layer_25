@@ -225,13 +225,13 @@ int main(int argc, char *argv[]){
             Test_NC_AP_00(true);
             break;
         case 19:
-            Test_MAC3_A()
+            Test_MAC3_A();
             break;
         case 20:
-            Test_MAC3_B()
+            Test_MAC3_B();
             break;
         case 21:
-            Test_MAC3_C()
+            Test_MAC3_C();
             break;
         default:
             break;
@@ -1188,7 +1188,7 @@ void mac_STA_receiver(RX_datagram * mac_data)
 {
     // process data
     //printf("        receive size %d\n",mac_data->data_size); 
-    printf ("%d\n", total_rx_frame++);
+    //printf ("%d\n", total_rx_frame++);
     //printf("        receive data %s\n",mac_data->data); 
     return;
 }
@@ -2482,7 +2482,7 @@ void Test_NC_AP_00(bool use_NC)
                 ap_handle.set_NC_Ack(frame_to_code.seq_num_from, sending_frame.ip_dst);
                 ap_handle.set_NC_Ack(sending_frame.seq_num_from, frame_to_code.ip_dst);
                 frames_coded++;
-                std::cout << "coded frames so far: " << frames_coded << "out of total" << frames_coded + frames_uncoded;
+                std::cout << "coded frames so far: " << frames_coded << "out of total" << frames_coded + frames_uncoded << "\n";
 
             }
             else
@@ -2533,7 +2533,7 @@ void Test_NC_AP_00(bool use_NC)
                 toAddr[5] = to_mac[5];
                 //std::cout<< "going to " << (int)toAddr[4] << (int)toAddr[5] << "\n";
                 frames_uncoded ++;
-                std::cout << "uncoded frames so far: " << frames_uncoded << "out of total" << frames_coded + frames_uncoded;
+                std::cout << "uncoded frames so far: " << frames_uncoded << "out of total" << frames_coded + frames_uncoded << "\n";
 
 
             }
