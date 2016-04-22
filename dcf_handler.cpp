@@ -389,7 +389,7 @@ int Dcf_handler::tx_frame(){
 
         //Check for DIFS, only if it is the first frame in queue, also it has to be the first tx
         //Retry transmission goes through other path to transmit
-        
+
         /*if (dcf_status.is_first_frame_and_first_tx)
         {
             //check if DIFS at first time is preempted,
@@ -417,7 +417,7 @@ int Dcf_handler::tx_frame(){
             dcf_log_info((char*)&dcf_logname,"TX send error\n");
             return RETURN_UNCLEAR_IF_TAKING_CHANNEL;
         }
-
+        set_abs_nav(ACK_PHY_TIME  + MAC_RX_PROC_TIME); 
 #ifdef DCF_TX_CONTENT_LOGGING_ENABLED
         gettimeofday(&tx_micro_end,NULL);
 #endif

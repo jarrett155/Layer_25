@@ -2503,6 +2503,7 @@ void Test_NC_AP_00(bool use_NC)
                 data[7] = 0X00;
 
 
+
                 // source ip addr
                 data[L3_start + 0] = 0;
                 data[L3_start + 1] = 0;
