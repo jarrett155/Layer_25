@@ -19,11 +19,13 @@
 #include <vector>
 #include "pthread.h"
 #include <iterator>
+#include <sys/time.h>
 
 
 #define DATA_SIZE 2000
 #define TEST_MCS_INDEX 0
 #define ACK_TIMEOUT_MS 500
+#define NC_WAIT_TIME 300
 
 #include "stdarg.h"
 #define default_log_file "mac_handler_tester.log"
@@ -118,6 +120,8 @@ struct NC_AP_Data
 {
     std::queue<RX_datagram> * received_data;
     AP_Handler *ap_handle;
+    int frame_received;
+    int coded_acks_rcv;
 };
 
 void Test_DCF_A();
@@ -143,7 +147,7 @@ void Test_MAC3_C();
 int main(int argc, char *argv[]){
     int desiredTest  = -1;
 
-    while(desiredTest<1 || desiredTest>21){
+    while(desiredTest<1 || desiredTest>22){
         std::cout << "Select desired application: \n";
         std::cout << "   1) DCF test MACaddr = 0xAA, send to 0xBB\n";
         std::cout << "   2) DCF test MACaddr = 0xBB, send to 0xAA\n";
@@ -166,6 +170,7 @@ int main(int argc, char *argv[]){
         std::cout << "   19) 3 way MAC AA\n";
         std::cout << "   20) 3 way MAC BB\n";
         std::cout << "   21) 3 way MAC CC\n";
+        std::cout << "   22) NC test AP throughput\n";
         
         std::cin >> desiredTest;
     }
@@ -233,6 +238,9 @@ int main(int argc, char *argv[]){
         case 21:
             Test_MAC3_C();
             break;
+        case 22:
+            Test_NC_AP_00_Throughput(true);
+            break;
         default:
             break;
     }
@@ -255,6 +263,16 @@ void* ack_Timeout(void * timer_arg)
     //std::cout << "\n\n\n      timout triggered \n\n\n";
     *(timer_vals->needs_to_ack) = false;
     //std::cout << "\n\n\n      timout triggered \n\n\n";
+    return NULL;
+}
+
+
+void* NC_op_Timeout(void * result)
+{
+
+    usleep(1000*NC_WAIT_TIME);
+    *((bool*)result) = false;
+
     return NULL;
 }
 
@@ -2262,6 +2280,8 @@ void* AP_Rx_thread(void* AP_data_arg)
             if(NC_frame.data[6] == 0xAA && NC_frame.data[7] == 0xAA)
             {
                 std::cout << "\n\nreceivd NC ack";
+                AP_data->frames_received ++;
+                AP_data->coded_acks_rcv ++;
                 int seq_num_ack = 256*NC_frame.data[8] + NC_frame.data[9];
                 int ip_src = 256*256*256*NC_frame.data[10] + 256*256*NC_frame.data[11] + 256*NC_frame.data[12] + NC_frame.data[13];
                 int ip_dst = 256*256*256*NC_frame.data[14] + 256*256*NC_frame.data[15] + 256*NC_frame.data[16] + NC_frame.data[17];
@@ -2275,6 +2295,7 @@ void* AP_Rx_thread(void* AP_data_arg)
             }
             else
             {
+                AP_data->frames_received ++;
                 int ip_src = 256*256*256*NC_frame.data[8] + 256*256*NC_frame.data[9] + 256*NC_frame.data[10] + NC_frame.data[11];
                 int ip_dst = 256*256*256*NC_frame.data[12] + 256*256*NC_frame.data[13] + 256*NC_frame.data[14] + NC_frame.data[15];
                 std::vector<uint8_t> data_vector(NC_frame.data + 16, NC_frame.data + 16 + 11);
@@ -2563,4 +2584,325 @@ void Test_NC_AP_00(bool use_NC)
     }
     
 }
+
+
+void Test_NC_AP_00_Throughput(bool use_NC)
+{    
+    int status;
+    uint8_t myAddr[6];
+    uint8_t toAddr[6];
+    uint8_t apAddr[6];
+    uint8_t data[DATA_SIZE];
+    //int count = 0;
+    int frames_uncoded = 0;
+    int frames_coded = 0;
+    
+    int LLC_Header_Size = 8;
+    int NC_L25_Header_Size = 12;
+    int L3_Header_Size = 8;
+
+    std::map<int,std::vector<uint8_t> > IP_to_MAC_map;
+
+    int data_start;
+    int L3_start;
+    bool NC_op_found = false;
+
+    struct timeval start_time, current_time;
+    
+    memset(myAddr, 0, 6);
+    memset(toAddr, 0, 6);
+    memset(data,0,sizeof(data));
+
+    myAddr[0] = 0x00;
+    myAddr[1] = 0x00;
+    myAddr[2] = 0x00;
+    myAddr[3] = 0x00;
+    myAddr[4] = 0x00;
+    myAddr[5] = 0x00;
+
+    toAddr[0] = 0xFF;
+    toAddr[1] = 0xFF;
+    toAddr[2] = 0xFF;
+    toAddr[3] = 0xFF;
+    toAddr[4] = 0xFF;
+    toAddr[5] = 0xFF;
+
+    std::vector<uint8_t> MAC_addr(toAddr, toAddr + sizeof(toAddr) / sizeof(uint8_t));
+    IP_to_MAC_map.insert(std::pair<int,std::vector<uint8_t> >(0, MAC_addr));
+
+    
+    MAC_addr[0] = 0xAA;
+    MAC_addr[1] = 0xAA;
+    MAC_addr[2] = 0xAA;
+    MAC_addr[3] = 0xAA;
+    MAC_addr[4] = 0xAA;
+    MAC_addr[5] = 0xAA;
+
+    IP_to_MAC_map.insert(std::pair<int,std::vector<uint8_t> >(1, MAC_addr));
+
+    MAC_addr[0] = 0xBB;
+    MAC_addr[1] = 0xBB;
+    MAC_addr[2] = 0xBB;
+    MAC_addr[3] = 0xBB;
+    MAC_addr[4] = 0xBB;
+    MAC_addr[5] = 0xBB;
+    
+    IP_to_MAC_map.insert(std::pair<int,std::vector<uint8_t> >(2, MAC_addr));
+    
+    apAddr[0] = 0x00;
+    apAddr[1] = 0x00;
+    apAddr[2] = 0x00;
+    apAddr[3] = 0x00;
+    apAddr[4] = 0X00;
+    apAddr[5] = 0x00;
+           
+    Mac_handler handler;
+    std::queue<RX_datagram> received_data;
+    void mac_NC_receiver(RX_datagram * mac_data);
+
+    AP_Handler ap_handle;
+    handler.set_frame_queue(&received_data);
+    handler.mac_setRxCallback(mac_NC_receiver);
+    handler.set_myadx(myAddr);
+    handler.set_PHY_TX_MCS(TEST_MCS_INDEX);
+    handler.set_AP(false);
+    handler.start_mac();
+    IP_NC_Frame sending_frame;
+
+    NC_AP_Data AP_data;
+    AP_data.received_data = &received_data;
+    AP_data.ap_handle = &ap_handle;
+    AP_data.frames_received = 0;
+    AP_data.coded_acks_rcv = 0;
+
+    int total_frame = 0, success_frame = 0;
+    std::cout << std::endl << "            [Host] is transmitting." << std::endl;
+
+    pthread_t Rx_thread;
+
+    pthread_create(&Rx_thread, NULL, AP_Rx_thread, (void*) &AP_data);
+
+    gettimeofday(&start_time, NULL);
+
+    //  Do experiment here by sending frames
+    while(1){
+    //    count = count + 1;
+    /*
+        if (!received_data.empty())
+        {
+            RX_datagram NC_frame = received_data.front();
+            received_data.pop();
+            if(NC_frame.data[6] == 0xAA && NC_frame.data[7] == 0xAA)
+            {
+                std::cout << "receivd NC ack";
+                //int seq_num_ack = 256*NC_frame.data[8] + NC_frame.data[9];
+                int ip_src = 256*256*256*NC_frame.data[10] + 256*256*NC_frame.data[11] + 256*NC_frame.data[12] + NC_frame.data[13];
+                int ip_dst = 256*256*256*NC_frame.data[14] + 256*256*NC_frame.data[15] + 256*NC_frame.data[16] + NC_frame.data[17];
+                //ap_handle.ack_Frame(ip_src, seq_num_ack);
+
+                std::vector<uint8_t> data_vector(NC_frame.data + 18, NC_frame.data + 18 + 11);
+                ap_handle.received_Frame(NC_frame.seq_num, ip_dst, ip_src, data_vector);
+
+
+            }
+            else
+            {
+                int ip_src = 256*256*256*NC_frame.data[8] + 256*256*NC_frame.data[9] + 256*NC_frame.data[10] + NC_frame.data[11];
+                int ip_dst = 256*256*256*NC_frame.data[12] + 256*256*NC_frame.data[13] + 256*NC_frame.data[14] + NC_frame.data[15];
+                std::vector<uint8_t> data_vector(NC_frame.data + 16, NC_frame.data + 16 + 11);
+                ap_handle.received_Frame(NC_frame.seq_num, ip_dst, ip_src, data_vector);
+
+                //printf("      receive data %s\n", NC_frame.data); 
+            }
+        }
+    */
+        //data[0] = total_frame%256;
+        uint32_t delay = (rand()%30)*FRAME_IDLE_UNIT;
+        usleep(delay);        
+  //    std::cout << std::endl << "            [Host] START new frame" << std::endl;
+        //std::cout<<"checking for next frame\n";
+        if(ap_handle.AP_Has_Next())
+        {
+            //std::cout << "getting next frame\n";
+            sending_frame = ap_handle.get_Next();
+            //std::cout << "got frame\n";
+            if(use_NC && NC_WAIT_TIME > 0)
+            {
+                //do waiting for frame
+                bool waiting_timeout = true;
+                pthread_t timeout_tid;
+                pthread_create(&timeout_tid, NULL, ap_handle.NC_op_found, &waiting_timeout);
+
+                ap_handle.NC_op_Timeout();
+                while(waiting_timeout)
+                {
+                    usleep(1000);
+                    if(ap_handle.has_Matching_Frame(sending_frame))
+                    {
+                        NC_op_found = true;
+                        pthread_cancel(timeout_tid);
+                        break;
+                    }
+                }
+            }
+            else if (use_NC)
+            {
+                NC_op_found = ap_handle.has_Matching_Frame(sending_frame);
+            }
+            if(NC_op_found)
+            {
+                NC_op_found = false;
+                std::cout << "\n\n\n\n NC!!!!!!!!!!!!!!!!!!!!! \n\n\n\n";
+                IP_NC_Frame frame_to_code = ap_handle.get_NC_Frame();
+
+                //set NC header and LLC header
+                data_start = LLC_Header_Size + NC_L25_Header_Size + L3_Header_Size;
+                L3_start = data_start - L3_Header_Size;
+
+                // LLC Header for layer 2.5
+                data[0] = 0xAA;
+                data[1] = 0XAA;
+                data[2] = 0X03;
+                data[3] = 0XAA;
+                data[4] = 0XAA;
+                data[5] = 0XAA;
+                data[6] = 0XAA;
+                data[7] = 0XAA;
+                
+                int seq_num1 = sending_frame.seq_num_from;
+                int seq_num2 = frame_to_code.seq_num_from;
+                int ip_addr1 = sending_frame.ip_src;
+                int ip_addr2 = frame_to_code.ip_src;
+
+                // NC Header for data
+                data[8] = seq_num1/256;
+                data[9] = seq_num1;
+                data[10] = seq_num2/256;
+                data[11] = seq_num2;
+                data[12] = 0;
+                data[13] = 0;
+                data[14] = 0;
+                data[15] = ip_addr1;
+                data[16] = 0;
+                data[17] = 0;
+                data[18] = 0;
+                data[19] = ip_addr2;
+
+                data[L3_start + 0] = 0;
+                data[L3_start + 0] = 0;
+                data[L3_start + 0] = 0;
+                data[L3_start + 0] = sending_frame.ip_src^frame_to_code.ip_src;
+
+                data[L3_start + 0] = 0;
+                data[L3_start + 0] = 0;
+                data[L3_start + 0] = 0;
+                data[L3_start + 0] = sending_frame.ip_dst^frame_to_code.ip_dst;
+
+                for( int i = 0; i < 11; i ++)
+                {
+                    data[data_start + i] = sending_frame.data[i]^frame_to_code.data[i];
+                } 
+
+                toAddr[0] = 0xFF;
+                toAddr[1] = 0xFF;
+                toAddr[2] = 0xFF;
+                toAddr[3] = 0xFF;
+                toAddr[4] = 0xFF;
+                toAddr[5] = 0xFF;
+                ap_handle.set_NC_Ack(frame_to_code.seq_num_from, sending_frame.ip_dst);
+                ap_handle.set_NC_Ack(sending_frame.seq_num_from, frame_to_code.ip_dst);
+                frames_coded++;
+                std::cout << "coded frames so far: " << frames_coded << "out of total" << frames_coded + frames_uncoded;
+
+            }
+            else
+            {
+
+                //set LLC header to standard val
+                data_start = LLC_Header_Size + L3_Header_Size;
+                L3_start = data_start - L3_Header_Size;
+                //std::cout<< "making header\n";
+                //LLC Header for normal
+                data[0] = 0xAA;
+                data[1] = 0XAA;
+                data[2] = 0X03;
+                data[3] = 0X00;
+                data[4] = 0X00;
+                data[5] = 0X00;
+                data[6] = 0X08;
+                data[7] = 0X00;
+
+
+                // source ip addr
+                data[L3_start + 0] = 0;
+                data[L3_start + 1] = 0;
+                data[L3_start + 2] = 0;
+                data[L3_start + 3] = sending_frame.ip_src;
+
+                // dest ip addr
+                data[L3_start + 4] = 0;
+                data[L3_start + 5] = 0;
+                data[L3_start + 6] = 0;
+                data[L3_start + 7] = sending_frame.ip_dst;
+
+                //std::cout << sending_frame.data.size() << " getting data\n";
+                for( unsigned int i = 0; i < sending_frame.data.size(); i ++)
+                {
+                    std::cout << sending_frame.data[i];
+                    data[data_start + i] = sending_frame.data[i];
+                }
+                //std::cout <<  "getting addr\n";
+                std::vector<uint8_t> to_mac = IP_to_MAC_map[sending_frame.ip_dst];
+                //std::cout << "setting addr\n";
+                toAddr[0] = to_mac[0];
+                toAddr[1] = to_mac[1];
+                toAddr[2] = to_mac[2];
+                toAddr[3] = to_mac[3];
+                toAddr[4] = to_mac[4];
+                toAddr[5] = to_mac[5];
+                //std::cout<< "going to " << (int)toAddr[4] << (int)toAddr[5] << "\n";
+                frames_uncoded ++;
+                std::cout << "uncoded frames so far: " << frames_uncoded << "out of total" << frames_coded + frames_uncoded;
+
+            }
+            if((frames_coded + frames_uncoded) % 100 == 1)
+            {
+                gettimeofday(&current_time, NULL);
+                long total_frames_on_net = frames_uncoded + AP_data.frames_received + AP_data.coded_acks_rcv;
+                float bits = DATA_SIZE*total_frames_on_net;
+                seconds  = current_time.tv_sec  - start_time.tv_sec;
+                useconds = current_time.tv_usec - start_time.tv_usec;
+                mtime = ((seconds) * 1000 + useconds/1000.0) + 0.5
+                float throughms = bits/mtime;
+                float through = throughms*1000;
+                std::cout << "\n\n\ndata only throughput is : " << through << " bits per second\n\n\n\n";
+
+            }
+            //std::cout << "about to send\n";
+            status = handler.send_frame(data, toAddr, apAddr, sizeof(data));
+            //std::cout << "just sent\n";
+            
+            total_frame++;
+
+
+
+            switch(status){
+            case 0:
+                success_frame++;
+                //std::cout << std::endl << "        [Host] Success! " << success_frame << "/" << total_frame << std::endl;
+                ap_handle.pop_Next_Frame();
+                break;
+            case -1:  
+                std::cout << std::endl << "            [Host] Failure. discard." << std::endl;
+                break;
+            case -2:
+                std::cout << std::endl << "            [Host] Failure! (busy)" << std::endl;
+                break;   
+            }     
+        }
+     
+    }
+    
+}
+
 
