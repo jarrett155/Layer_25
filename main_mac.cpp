@@ -120,7 +120,7 @@ struct NC_AP_Data
 {
     std::queue<RX_datagram> * received_data;
     AP_Handler *ap_handle;
-    int frame_received;
+    int frames_received;
     int coded_acks_rcv;
 };
 
@@ -143,6 +143,7 @@ void Test_NC_AP_00(bool use_NC);
 void Test_MAC3_A();
 void Test_MAC3_B();
 void Test_MAC3_C();
+void Test_NC_AP_00_Throughput(bool use_NC);
 
 int main(int argc, char *argv[]){
     int desiredTest  = -1;
@@ -358,7 +359,7 @@ bool AP_Handler::has_Matching_Frame(IP_NC_Frame frame_to_match)
     //std::cout << "checking for nc\n";
     if (destinations[current_destination].waiting_for_ack)
     {
-        std::cout << "no NC, waiting for ack\n";
+        //std::cout << "no NC, waiting for ack\n";
         return false;
     }
     else
@@ -2280,8 +2281,8 @@ void* AP_Rx_thread(void* AP_data_arg)
             if(NC_frame.data[6] == 0xAA && NC_frame.data[7] == 0xAA)
             {
                 std::cout << "\n\nreceivd NC ack";
-                AP_data->frames_received ++;
-                AP_data->coded_acks_rcv ++;
+                ap_data->frames_received ++;
+                ap_data->coded_acks_rcv ++;
                 int seq_num_ack = 256*NC_frame.data[8] + NC_frame.data[9];
                 int ip_src = 256*256*256*NC_frame.data[10] + 256*256*NC_frame.data[11] + 256*NC_frame.data[12] + NC_frame.data[13];
                 int ip_dst = 256*256*256*NC_frame.data[14] + 256*256*NC_frame.data[15] + 256*NC_frame.data[16] + NC_frame.data[17];
@@ -2295,7 +2296,7 @@ void* AP_Rx_thread(void* AP_data_arg)
             }
             else
             {
-                AP_data->frames_received ++;
+                ap_data->frames_received ++;
                 int ip_src = 256*256*256*NC_frame.data[8] + 256*256*NC_frame.data[9] + 256*NC_frame.data[10] + NC_frame.data[11];
                 int ip_dst = 256*256*256*NC_frame.data[12] + 256*256*NC_frame.data[13] + 256*NC_frame.data[14] + NC_frame.data[15];
                 std::vector<uint8_t> data_vector(NC_frame.data + 16, NC_frame.data + 16 + 11);
@@ -2731,9 +2732,8 @@ void Test_NC_AP_00_Throughput(bool use_NC)
                 //do waiting for frame
                 bool waiting_timeout = true;
                 pthread_t timeout_tid;
-                pthread_create(&timeout_tid, NULL, ap_handle.NC_op_found, &waiting_timeout);
+                pthread_create(&timeout_tid, NULL, NC_op_Timeout, &waiting_timeout);
 
-                ap_handle.NC_op_Timeout();
                 while(waiting_timeout)
                 {
                     usleep(1000);
@@ -2870,9 +2870,9 @@ void Test_NC_AP_00_Throughput(bool use_NC)
                 gettimeofday(&current_time, NULL);
                 long total_frames_on_net = frames_uncoded + AP_data.frames_received + AP_data.coded_acks_rcv;
                 float bits = DATA_SIZE*total_frames_on_net;
-                seconds  = current_time.tv_sec  - start_time.tv_sec;
-                useconds = current_time.tv_usec - start_time.tv_usec;
-                mtime = ((seconds) * 1000 + useconds/1000.0) + 0.5
+                long seconds  = current_time.tv_sec  - start_time.tv_sec;
+                long useconds = current_time.tv_usec - start_time.tv_usec;
+                long mtime = ((seconds) * 1000 + useconds/1000.0) + 0.5;
                 float throughms = bits/mtime;
                 float through = throughms*1000;
                 std::cout << "\n\n\ndata only throughput is : " << through << " bits per second\n\n\n\n";
