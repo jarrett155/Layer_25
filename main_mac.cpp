@@ -24,8 +24,8 @@
 
 #define DATA_SIZE 2000
 #define TEST_MCS_INDEX 0
-#define ACK_TIMEOUT_MS 500
-#define NC_WAIT_TIME 300
+#define ACK_TIMEOUT_MS 300
+#define NC_WAIT_TIME 40
 
 #include "stdarg.h"
 #define default_log_file "mac_handler_tester.log"
@@ -259,7 +259,7 @@ void* ack_Timeout(void * timer_arg)
     Timeout_Args * timer_vals =  (Timeout_Args *)timer_arg;
     //std::cout << " input : " << &timer_vals;
     usleep(1000*ACK_TIMEOUT_MS);
-    std::cout << "\n\n\n      timout triggered \n\n\n";
+    //std::cout << "\n\n\n      timout triggered \n\n\n";
     *(timer_vals->must_retransmit) = true;
     //std::cout << "\n\n\n      timout triggered \n\n\n";
     *(timer_vals->needs_to_ack) = false;
@@ -270,10 +270,10 @@ void* ack_Timeout(void * timer_arg)
 
 void* NC_op_Timeout(void * result)
 {
-
+    std::cout << "\n\n\n      starting timeout \n\n\n";
     usleep(1000*NC_WAIT_TIME);
+    std::cout << "\n\n\n      timeout triggered \n\n\n";
     *((bool*)result) = false;
-
     return NULL;
 }
 
@@ -459,7 +459,7 @@ void AP_Handler::pop_Next_Frame()
 // Call this when an NC ack is received. 
 void AP_Handler::ack_Frame(int src_ip, int seq_num)
 {
-    std::cout << "\nacking frame from ip : " << src_ip << "with seq num : " << seq_num << "\n";
+    //std::cout << "\nacking frame from ip : " << src_ip << "with seq num : " << seq_num << "\n";
     int index_of_dst = IP_to_index_map[src_ip];
     if (seq_num == destinations[index_of_dst].seq_need_ack)
     {
@@ -2280,14 +2280,14 @@ void* AP_Rx_thread(void* AP_data_arg)
             received_data->pop();
             if(NC_frame.data[6] == 0xAA && NC_frame.data[7] == 0xAA)
             {
-                std::cout << "\n\nreceivd NC ack";
+                //std::cout << "\n\nreceivd NC ack";
                 ap_data->frames_received ++;
                 ap_data->coded_acks_rcv ++;
                 int seq_num_ack = 256*NC_frame.data[8] + NC_frame.data[9];
                 int ip_src = 256*256*256*NC_frame.data[10] + 256*256*NC_frame.data[11] + 256*NC_frame.data[12] + NC_frame.data[13];
                 int ip_dst = 256*256*256*NC_frame.data[14] + 256*256*NC_frame.data[15] + 256*NC_frame.data[16] + NC_frame.data[17];
                 ap_handle->ack_Frame(ip_src, seq_num_ack);
-                std::cout << "from ip: " << ip_src << "\n\n\n";
+                //std::cout << "from ip: " << ip_src << "\n\n\n";
 
                 std::vector<uint8_t> data_vector(NC_frame.data + 18, NC_frame.data + 18 + 11);
                 ap_handle->received_Frame(NC_frame.seq_num, ip_dst, ip_src, data_vector);
@@ -2675,7 +2675,9 @@ void Test_NC_AP_00_Throughput(bool use_NC)
     AP_data.ap_handle = &ap_handle;
     AP_data.frames_received = 0;
     AP_data.coded_acks_rcv = 0;
-
+    
+    bool waiting_timeout = true;
+    
     int total_frame = 0, success_frame = 0;
     std::cout << std::endl << "            [Host] is transmitting." << std::endl;
 
@@ -2730,20 +2732,26 @@ void Test_NC_AP_00_Throughput(bool use_NC)
             if(use_NC && NC_WAIT_TIME > 0)
             {
                 //do waiting for frame
-                bool waiting_timeout = true;
-                pthread_t timeout_tid;
-                pthread_create(&timeout_tid, NULL, NC_op_Timeout, &waiting_timeout);
+                //waiting_timeout = true;
+                //pthread_create(&timeout_tid, NULL, NC_op_Timeout, &waiting_timeout);
+                int count_loop = 0;
+                int max_count = 2*NC_WAIT_TIME;
 
-                while(waiting_timeout)
+                while(count_loop < max_count)
                 {
-                    usleep(1000);
+                    count_loop ++;
+                    usleep(500);
                     if(ap_handle.has_Matching_Frame(sending_frame))
                     {
+                        std::cout << "op found " << waiting_timeout;
                         NC_op_found = true;
-                        pthread_cancel(timeout_tid);
+                        //pthread_cancel(timeout_tid);
                         break;
                     }
+                    //std::cout <<"stuck";
                 }
+                //std::cout << "destroying thread";
+                //pthread_cancel(timeout_tid);
             }
             else if (use_NC)
             {
@@ -2752,7 +2760,7 @@ void Test_NC_AP_00_Throughput(bool use_NC)
             if(NC_op_found)
             {
                 NC_op_found = false;
-                std::cout << "\n\n\n\n NC!!!!!!!!!!!!!!!!!!!!! \n\n\n\n";
+                //std::cout << "\n\n\n\n NC!!!!!!!!!!!!!!!!!!!!! \n\n\n\n";
                 IP_NC_Frame frame_to_code = ap_handle.get_NC_Frame();
 
                 //set NC header and LLC header
@@ -2798,10 +2806,10 @@ void Test_NC_AP_00_Throughput(bool use_NC)
                 data[L3_start + 0] = 0;
                 data[L3_start + 0] = sending_frame.ip_dst^frame_to_code.ip_dst;
 
-                for( int i = 0; i < 11; i ++)
+                /*for( int i = 0; i < 11; i ++)
                 {
                     data[data_start + i] = sending_frame.data[i]^frame_to_code.data[i];
-                } 
+                } */
 
                 toAddr[0] = 0xFF;
                 toAddr[1] = 0xFF;
@@ -2812,7 +2820,7 @@ void Test_NC_AP_00_Throughput(bool use_NC)
                 ap_handle.set_NC_Ack(frame_to_code.seq_num_from, sending_frame.ip_dst);
                 ap_handle.set_NC_Ack(sending_frame.seq_num_from, frame_to_code.ip_dst);
                 frames_coded++;
-                std::cout << "coded frames so far: " << frames_coded << "out of total" << frames_coded + frames_uncoded;
+                std::cout << "coded frames so far: " << frames_coded << "out of total" << frames_coded + frames_uncoded << "\n";
 
             }
             else
@@ -2846,11 +2854,11 @@ void Test_NC_AP_00_Throughput(bool use_NC)
                 data[L3_start + 7] = sending_frame.ip_dst;
 
                 //std::cout << sending_frame.data.size() << " getting data\n";
-                for( unsigned int i = 0; i < sending_frame.data.size(); i ++)
+                /*for( unsigned int i = 0; i < sending_frame.data.size(); i ++)
                 {
                     std::cout << sending_frame.data[i];
                     data[data_start + i] = sending_frame.data[i];
-                }
+                }*/
                 //std::cout <<  "getting addr\n";
                 std::vector<uint8_t> to_mac = IP_to_MAC_map[sending_frame.ip_dst];
                 //std::cout << "setting addr\n";
@@ -2862,21 +2870,25 @@ void Test_NC_AP_00_Throughput(bool use_NC)
                 toAddr[5] = to_mac[5];
                 //std::cout<< "going to " << (int)toAddr[4] << (int)toAddr[5] << "\n";
                 frames_uncoded ++;
-                std::cout << "uncoded frames so far: " << frames_uncoded << "out of total" << frames_coded + frames_uncoded;
+                //std::cout << "uncoded frames so far: " << frames_uncoded << "out of total" << frames_coded + frames_uncoded;
 
             }
             if((frames_coded + frames_uncoded) % 100 == 1)
             {
                 gettimeofday(&current_time, NULL);
-                long total_frames_on_net = frames_uncoded + AP_data.frames_received + AP_data.coded_acks_rcv;
-                float bits = DATA_SIZE*total_frames_on_net;
+                long total_frames_client = AP_data.frames_received;
+                long total_frames_ap = frames_uncoded + AP_data.coded_acks_rcv;
+                float bits_client = DATA_SIZE*total_frames_client;
+                float bits_AP = DATA_SIZE*total_frames_ap;
                 long seconds  = current_time.tv_sec  - start_time.tv_sec;
                 long useconds = current_time.tv_usec - start_time.tv_usec;
                 long mtime = ((seconds) * 1000 + useconds/1000.0) + 0.5;
-                float throughms = bits/mtime;
-                float through = throughms*1000;
-                std::cout << "\n\n\ndata only throughput is : " << through << " bits per second\n\n\n\n";
-
+                float throughms_client = bits_client/mtime;
+                float through_client = throughms_client*1000;
+                float throughms_AP = bits_AP/mtime;
+                float through_AP = throughms_AP*1000;
+                std::cout << "\n\n\nclient only throughput is : " << through_client << " bits per second\n";
+                std::cout << "AP only throughput is : " << through_AP << " bits per second\n\n\n\n";
             }
             //std::cout << "about to send\n";
             status = handler.send_frame(data, toAddr, apAddr, sizeof(data));
